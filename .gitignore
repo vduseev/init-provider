@@ -1,3 +1,6 @@
+# Thumbnails
+.DS_Store
+
 # AI assistants
 .claude/
 context/
