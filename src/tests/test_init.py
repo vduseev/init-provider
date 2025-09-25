@@ -1,7 +1,7 @@
 import pytest
 
-from singleton_provider import BaseProvider, init, requires
-from singleton_provider.exceptions import (
+from init_provider import BaseProvider, init, requires
+from init_provider.exceptions import (
     CircularDependency,
     InitCalledDirectly,
     ProviderInitializationError,
@@ -32,7 +32,7 @@ def test_assign_before_initialize(clean_sys_modules):
 
     assert Provider._init_counter == 0
     assert "data" in Provider.__provider_guarded_attrs__
-    
+
     Provider.data = "other"
     assert "data" not in Provider.__provider_guarded_attrs__
     assert Provider._init_counter == 0
@@ -61,6 +61,7 @@ def test_dependency_order(clean_sys_modules):
     @requires(ProviderA)
     class ProviderB(BaseProvider):
         """Docstring of provider B"""
+
         b: str
         """Docstring of guarded attribute B"""
         _init_counter = 0
@@ -112,30 +113,31 @@ def test_dependency_order(clean_sys_modules):
 
 def test_circular_dependency_detection(clean_sys_modules):
     """craft two providers with mutual @requires; importing class raises CircularDependency."""
+
     class CircularA(BaseProvider):
         def __init__(self):
             pass
-        
+
         @init
         def get_a(self) -> str:
             return "a"
-    
+
     @requires(CircularA)
     class CircularB(BaseProvider):
         def __init__(self):
             pass
-        
+
         @init
         def get_b(self) -> str:
             return "b"
-    
+
     # Now create the circular dependency by making A depend on B
     CircularA.__provider_dependencies__ = {CircularB}
-    
+
     # Accessing either should detect the circular dependency
     with pytest.raises(CircularDependency):
         CircularA.get_a()
-    
+
     with pytest.raises(CircularDependency):
         CircularB.get_b()
 
@@ -148,7 +150,7 @@ def test_self_dependency_detection(clean_sys_modules):
         def __init__(self):
             self.value = self.compute_value()
             self._init_counter += 1
-        
+
         @init
         def compute_value(self) -> int:
             return self._init_counter
@@ -175,11 +177,11 @@ def test_initialize_raise_exception(clean_sys_modules):
         def __init__(self):
             self._init_counter += 1
             raise ValueError("Database connection failed")
-        
+
         @init
         def get_counter(self):
             return self._init_counter
-    
+
     with pytest.raises(ProviderInitializationError):
         FailingProvider.get_counter()
 
@@ -187,9 +189,9 @@ def test_initialize_raise_exception(clean_sys_modules):
 def test_attribute_unset_error(clean_sys_modules):
     class BadProvider(BaseProvider):
         unset_attribute: str
-        
+
         def __init__(self):
             pass
-    
+
     with pytest.raises(AttributeNotInitialized):
         BadProvider.unset_attribute

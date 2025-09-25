@@ -2,9 +2,9 @@ import inspect
 
 import pytest
 
-from singleton_provider import BaseProvider, init
-from singleton_provider.provider import ProviderMetaclass
-from singleton_provider.exceptions import ProviderDefinitionError
+from init_provider import BaseProvider, init
+from init_provider.provider import ProviderMetaclass
+from init_provider.exceptions import ProviderDefinitionError
 
 
 def test_basic(clean_sys_modules):
@@ -34,17 +34,25 @@ def test_basic(clean_sys_modules):
 
 
 def test_plain_function_disallowed(clean_sys_modules):
-    with pytest.raises(ProviderDefinitionError, match="must be decorated with @classmethod, @staticmethod, or @init"):
+    with pytest.raises(
+        ProviderDefinitionError,
+        match="must be decorated with @classmethod, @staticmethod, or @init",
+    ):
+
         class PlainFunctionProvider(BaseProvider):
             def __init__(self):
                 pass
-            
+
             def helper_function(self):  # This should trigger the error
                 return "helper"
 
 
 def test_init_not_allowed_on_init(clean_sys_modules):
-    with pytest.raises(ProviderDefinitionError, match="is a reserved method and cannot be decorated with @init"):
+    with pytest.raises(
+        ProviderDefinitionError,
+        match="is a reserved method and cannot be decorated with @init",
+    ):
+
         class InitOnInitializeProvider(BaseProvider):
             @init
             def __init__(self):

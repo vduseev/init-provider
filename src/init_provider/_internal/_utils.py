@@ -27,7 +27,7 @@ _R = TypeVar("_R")
 _PT = TypeVar("_PT", bound="BaseProvider")
 
 
-logger = logging.getLogger("singleton_provider")
+logger = logging.getLogger("init_provider")
 _sync_init_lock = threading.RLock()
 """Guarantee that two threads cannot call __init__() of the same provider
 at the same time."""
@@ -61,7 +61,7 @@ def _raise_on_circular_dependencies(
         _raise_on_circular_dependencies(dep, visited, recursion_stack)
 
     recursion_stack.remove(cls)
-            
+
 
 def _get_all_dependencies(cls: type[_PT]) -> set[type["BaseProvider"]]:
     deps = set(cls.__provider_dependencies__)
@@ -72,17 +72,17 @@ def _get_all_dependencies(cls: type[_PT]) -> set[type["BaseProvider"]]:
 
 def _get_initialization_order(cls: type[_PT]) -> list[type["BaseProvider"]]:
     """Determine the correct initialization order using topological sort.
-    
+
     This method analyzes the dependency graph and returns providers in the order
     they should be initialized, ensuring that dependencies are always initialized
     before the providers that depend on them.
-    
+
     Returns:
         list[type[BaseProvider]]: Providers ordered for safe initialization.
-        
+
     Raises:
         InitializationOrderMismatchError: If the initialization order cannot be determined.
-        
+
     Note:
         This is an internal method that implements Kahn's algorithm for topological sorting.
         The algorithm builds a dependency graph and processes nodes with no incoming edges,
@@ -153,8 +153,7 @@ def _initialize_provider_chain(
             cls.__class__._ensure_setup_configured()
 
         logger.debug(
-            f"About to initialize provider {cls.__name__} "
-            f"because of: {requested_for}"
+            f"About to initialize provider {cls.__name__} because of: {requested_for}"
         )
 
         # Check for circular dependencies.
@@ -187,11 +186,12 @@ def _initialize_provider_chain(
                         exception=e,
                     ) from e
 
-                
+
 def _wrap_guarded_method(
-    f: Callable[Concatenate[type[_PT], _P], _R]
+    f: Callable[Concatenate[type[_PT], _P], _R],
 ) -> Callable[Concatenate[type[_PT], _P], _R]:
     if inspect.iscoroutinefunction(f):
+
         @wraps(f)
         async def async_wrapper(
             cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs
@@ -204,9 +204,7 @@ def _wrap_guarded_method(
         return async_wrapper  # type: ignore[return-value]
 
     @wraps(f)
-    def sync_wrapper(
-        cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs
-    ) -> _R:  # type: ignore[override]
+    def sync_wrapper(cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs) -> _R:  # type: ignore[override]
         if not getattr(cls, "__provider_initialized__", False):
             _raise_on_self_dependency(cls, f)
             _initialize_provider_chain(cls, requested_for=f.__name__)

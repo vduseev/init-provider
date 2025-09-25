@@ -3,8 +3,8 @@ import sys
 
 import pytest
 
-from singleton_provider import BaseProvider, init, requires
-from singleton_provider._internal._metaclass import ProviderMetaclass
+from init_provider import BaseProvider, init, requires
+from init_provider._internal._metaclass import ProviderMetaclass
 
 
 class UsersDatabase(BaseProvider):
@@ -14,7 +14,7 @@ class UsersDatabase(BaseProvider):
     def __init__(self):
         self._users = self.fetch()
         self._init_counter += 1
-    
+
     @init
     def get(self, id: int) -> str:
         return self._users[id]
@@ -51,15 +51,14 @@ class UsersCacheProvider(BaseProvider):
 
 class UsersService(BaseProvider):
     _init_counter = 0
-    
+
     def __init__(self):
         self._init_counter += 1
-    
+
     @init
     async def fetch(self) -> str:
         await asyncio.sleep(0)  # Yield control to event loop
         return "async_data"
-
 
 
 @pytest.fixture
@@ -71,11 +70,11 @@ def clean_sys_modules():
     for module_name in sys.modules:
         if module_name.startswith("test_") or "conftest" in module_name:
             to_remove.append(module_name)
-    
+
     for module_name in to_remove:
         if module_name in sys.modules:
             del sys.modules[module_name]
-    
+
     # Reset metaclass state
     ProviderMetaclass.__provider_setup_done__ = False
     ProviderMetaclass.__provider_setup_hook__ = None

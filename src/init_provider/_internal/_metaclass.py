@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from ..provider import BaseProvider
 
 
-logger = logging.getLogger("singleton_provider")
+logger = logging.getLogger("init_provider")
 __all__ = ["ProviderMetaclass"]
 
 
@@ -52,11 +52,12 @@ class ProviderMetaclass(ABCMeta):
 
         def _init_plug(*args: Any, **kwargs: Any) -> None:
             """Prevent users from calling __init__() directly.
-            
+
             The __init__() method is only meant to be called by the provider
             initialization process.
             """
             raise InitCalledDirectly(name)
+
         _init_plug.__name__ = "__init__"
 
         for attr, value in namespace.items():
@@ -76,15 +77,19 @@ class ProviderMetaclass(ABCMeta):
 
         cls: type = ABCMeta.__new__(mcls, name, bases, new_ns, **kwds)
         return cls
-    
+
     def __getattribute__(cls, name: str) -> Any:
         try:
-            guarded_attrs: set[str] = type.__getattribute__(cls, "__provider_guarded_attrs__")
+            guarded_attrs: set[str] = type.__getattribute__(
+                cls, "__provider_guarded_attrs__"
+            )
         except AttributeError:
             pass
         else:
             if name in guarded_attrs:
-                is_initialized: bool = type.__getattribute__(cls, "__provider_initialized__")
+                is_initialized: bool = type.__getattribute__(
+                    cls, "__provider_initialized__"
+                )
                 if not is_initialized:
                     provider_cls = cast("type[BaseProvider]", cls)
                     _initialize_provider_chain(provider_cls, requested_for=name)
@@ -95,7 +100,9 @@ class ProviderMetaclass(ABCMeta):
 
     def __setattr__(cls, name: str, value: Any) -> None:
         try:
-            guarded_attrs: set[str] = type.__getattribute__(cls, "__provider_guarded_attrs__")
+            guarded_attrs: set[str] = type.__getattribute__(
+                cls, "__provider_guarded_attrs__"
+            )
         except AttributeError:
             pass
         else:
