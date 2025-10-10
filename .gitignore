@@ -1,3 +1,11 @@
+# Thumbnails
+.DS_Store
+
+# AI assistants
+.claude/
+context/
+AGENTS.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
