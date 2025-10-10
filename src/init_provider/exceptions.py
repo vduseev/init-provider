@@ -58,73 +58,93 @@ class CircularDependency(ProviderError):
         )
 
 
-class InitializationOrderMismatch(ProviderError):
-    """Failed to determine a valid initialization order of providers.
+class DependencyChainMismatch(ProviderError):
+    """Failed to determine a valid dependency order of providers.
 
     This error occurs when the framework is unable to determine a valid
-    initialization order for the provider and its dependencies. The number
-    of all dependencies within the initialization chain does not match the
-    the initialization order length.
+    dependency chain for the providers. The length of the dependency chain
+    does not match the number of all involved providers.
     """
 
-    def __init__(self, provider: str, order: list[str], dependencies: list[str]):
-        super().__init__(
-            f"Number of dependencies for provider {provider} does not match "
-            f"the initialization order. Order: {', '.join(order)}. "
-            f"Dependencies: {', '.join(dependencies)}"
-        )
+    def __init__(
+        self,
+        order: list[str],
+        providers: list[str],
+        cause: str | None = None,
+    ):
+        if cause:
+            super().__init__(
+                "The length of the initialization chain for the provider "
+                f"{cause} does not match the number of involved providers."
+                f"Chain: {', '.join(order)}. "
+                f"Providers: {', '.join(providers)}"
+            )
+        else:
+            super().__init__(
+                "The length of the dependency chain does not match "
+                "the number of involved providers. "
+                f"Chain: {', '.join(order)}. "
+                f"Providers: {', '.join(providers)}"
+            )
 
 
 class SetupError(ProviderError):
-    """Raised when a provider fails to setup properly.
-
-    This error occurs when the provider's setup() method raises an exception.
-    """
+    """Raised when the setup hook fails."""
 
     def __init__(self, exception: Exception):
-        super().__init__(f"Error while invoking the setup function: {exception}")
+        super().__init__(f"Error while invoking the setup hook: {exception}")
 
 
-class ProviderInitializationError(ProviderError):
+class DisposeError(ProviderError):
+    """Raised when the @dispose hook or a provider_dispose() method fails."""
+
+    def __init__(self, exception: Exception):
+        super().__init__(f"Error while disposing: {exception}")
+
+
+class InitError(ProviderError):
     """Raised when a provider fails to initialize properly.
 
-    This error occurs when the provider's __init__() method raises an exception.
-
     Example:
+
         ```python
         class DatabaseProvider(BaseProvider):
-            def __init__(self) -> None:
+            def provider_init(self) -> None:
                 # This might raise an exception
                 self._connection = connect_to_database()
         ```
     """
 
-    def __init__(self, provider: str, dep: str, exception: Exception):
+    def __init__(
+        self,
+        provider: str,
+        exception: Exception,
+        cause: str | None = None,
+    ):
         super().__init__(
-            f"Failed to initialize provider {provider}"
-            f"{' because of dependency ' + dep if dep != provider else ''}"
+            f"Failed to initialize {provider}"
+            f"{' because of ' + cause if cause else ''}"
             f" ({type(exception).__name__}: {exception})"
         )
 
 
 class SelfDependency(ProviderError):
-    """Provider method decorated with @init was called from within initialize().
+    """Provider method was called from within provider_init().
 
-    Calling provider class method decorated with @init causes the provider
-    and its dependencies to be initialized, if they weren't already. Calling
-    an @init decorated method from within __init__() creates a self
-    dependency loop.
+    Calling provider method causes the provider and its dependencies to be
+    initialized, if they weren't already. This is why calling a provider
+    method inside provider_init() creates a self dependency loop.
 
     Methods decorated with @classmethod or @staticmethod can be called from
-    within __init__() without causing a self dependency loop, but cannot
-    rely on uninitialized attributes or other @init decorated methods.
+    within provider_init() without causing a self dependency loop, but cannot
+    rely on uninitialized attributes.
 
     Example:
         ```python
         class UserProvider(BaseProvider):
             users: list[str]
 
-            def __init__(self) -> None:
+            def provider_init(self) -> None:
                 self.users = self.load_users() # ← This is fine.
                 self.add_user("user3") # ← This will raise SelfDependency.
 
@@ -132,7 +152,6 @@ class SelfDependency(ProviderError):
             def load_users(cls) -> list[str]:
                 return ["user1", "user2"]
 
-            @init
             def add_user(self, user: str) -> None:
                 self.users.append(user)
         ```
@@ -140,8 +159,8 @@ class SelfDependency(ProviderError):
 
     def __init__(self, name: str, method: str):
         super().__init__(
-            f"Provider method {method} decorated with @init was called "
-            f"from within __init__() of its class {name}"
+            f"Method {method} was called in provider_init() "
+            f"of its class {name}"
         )
 
 
@@ -158,10 +177,3 @@ class AttributeNotInitialized(ProviderError):
 
 class ProviderDefinitionError(ProviderError):
     """Raised when a provider is defined incorrectly."""
-
-
-class InitCalledDirectly(ProviderError):
-    """Raised when a provider's __init__() method is called directly."""
-
-    def __init__(self, provider: str):
-        super().__init__(f"Cannot call method {provider}.__init__() directly.")

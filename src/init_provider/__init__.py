@@ -1,12 +1,12 @@
 from . import exceptions
 from .provider import BaseProvider
-from .decorators import init, requires, setup
+from .decorators import requires, setup, dispose
 
 
 __all__ = [
     "BaseProvider",
     "requires",
     "setup",
-    "init",
+    "dispose",
     "exceptions",
 ]

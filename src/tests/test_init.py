@@ -1,10 +1,9 @@
 import pytest
 
-from init_provider import BaseProvider, init, requires
+from init_provider import BaseProvider, requires
 from init_provider.exceptions import (
     CircularDependency,
-    InitCalledDirectly,
-    ProviderInitializationError,
+    InitError,
     SelfDependency,
     AttributeNotInitialized,
 )
@@ -14,7 +13,7 @@ def test_access_before_initialize(clean_sys_modules):
     class Provider(BaseProvider):
         _init_counter = 0
 
-        def __init__(self):
+        def provider_init(self):
             self._init_counter += 1
 
     assert Provider.__provider_initialized__ is False
@@ -26,7 +25,7 @@ def test_assign_before_initialize(clean_sys_modules):
         data: str
         _init_counter = 0
 
-        def __init__(self):
+        def provider_init(self):
             self.data = "data"
             self._init_counter += 1
 
@@ -49,12 +48,11 @@ def test_dependency_order(clean_sys_modules):
         a: str
         _init_counter = 0
 
-        def __init__(self):
+        def provider_init(self):
             self.a = "A"
             self._init_counter += 1
             order.append("A")
 
-        @init
         def get_a(self) -> str:
             return self.a
 
@@ -67,7 +65,7 @@ def test_dependency_order(clean_sys_modules):
         _init_counter = 0
         """init counter of provider B"""
 
-        def __init__(self):
+        def provider_init(self):
             self.b = "B"
             self._init_counter += 1
             order.append("B")
@@ -79,11 +77,10 @@ def test_dependency_order(clean_sys_modules):
         _init_counter = 0
         """init counter of provider C"""
 
-        def __init__(self):
+        def provider_init(self):
             self._init_counter += 1
             order.append("C")
 
-        @init
         def get_abc(self) -> str:
             """Docstring of get_abc method"""
             return f"{ProviderA.a}{ProviderB.b}{self.c}"
@@ -115,19 +112,17 @@ def test_circular_dependency_detection(clean_sys_modules):
     """craft two providers with mutual @requires; importing class raises CircularDependency."""
 
     class CircularA(BaseProvider):
-        def __init__(self):
+        def provider_init(self):
             pass
 
-        @init
         def get_a(self) -> str:
             return "a"
 
     @requires(CircularA)
     class CircularB(BaseProvider):
-        def __init__(self):
+        def provider_init(self):
             pass
 
-        @init
         def get_b(self) -> str:
             return "b"
 
@@ -147,11 +142,10 @@ def test_self_dependency_detection(clean_sys_modules):
         _init_counter = 0
         value: int
 
-        def __init__(self):
+        def provider_init(self):
             self.value = self.compute_value()
             self._init_counter += 1
 
-        @init
         def compute_value(self) -> int:
             return self._init_counter
 
@@ -161,28 +155,18 @@ def test_self_dependency_detection(clean_sys_modules):
     assert SelfDependentProvider._init_counter == 0
 
 
-def test_initialize_called_directly(clean_sys_modules):
-    class Provider(BaseProvider):
-        def __init__(self):
-            pass
-
-    with pytest.raises(InitCalledDirectly):
-        Provider.__init__()  # type: ignore[call-arg]
-
-
 def test_initialize_raise_exception(clean_sys_modules):
     class FailingProvider(BaseProvider):
         _init_counter = 0
 
-        def __init__(self):
+        def provider_init(self):
             self._init_counter += 1
             raise ValueError("Database connection failed")
 
-        @init
         def get_counter(self):
             return self._init_counter
 
-    with pytest.raises(ProviderInitializationError):
+    with pytest.raises(InitError):
         FailingProvider.get_counter()
 
 
@@ -190,7 +174,7 @@ def test_attribute_unset_error(clean_sys_modules):
     class BadProvider(BaseProvider):
         unset_attribute: str
 
-        def __init__(self):
+        def provider_init(self):
             pass
 
     with pytest.raises(AttributeNotInitialized):

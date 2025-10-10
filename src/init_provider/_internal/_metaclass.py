@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import logging
 from abc import ABCMeta
 from types import FunctionType
@@ -7,11 +8,15 @@ from typing import Any, Callable, TYPE_CHECKING, cast
 
 from ..exceptions import (
     SetupError,
+    DisposeError,
     AttributeNotInitialized,
     ProviderDefinitionError,
-    InitCalledDirectly,
 )
-from ._utils import _initialize_provider_chain
+from ._utils import (
+    _initialize_provider_chain,
+    _sort_providers,
+    _wrap_guarded_method,
+)
 
 if TYPE_CHECKING:
     from ..provider import BaseProvider
@@ -22,8 +27,10 @@ __all__ = ["ProviderMetaclass"]
 
 
 class ProviderMetaclass(ABCMeta):
+    __providers__: list[type] = []
     __provider_setup_done__: bool = False
     __provider_setup_hook__: Callable | None = None
+    __provider_dispose_hook__: Callable | None = None
 
     def __new__(
         mcls: type,
@@ -33,49 +40,33 @@ class ProviderMetaclass(ABCMeta):
         /,
         **kwds: Any,
     ) -> type:
-        # All methods other than __init__ must be decorated with @classmethod
-        # or @staticmethod.
-        for attr, value in namespace.items():
-            if (
-                attr != "__init__"
-                and isinstance(value, FunctionType)
-                and not (attr.startswith("__") and attr.endswith("__"))
-            ):
-                raise ProviderDefinitionError(
-                    f"Method {name}.{attr} must be decorated with "
-                    "@classmethod, @staticmethod, or @init to comply with "
-                    "the provider protocol"
-                )
-
         annotations: dict[str, Any] = namespace.get("__annotations__", {})
         new_ns: dict[str, Any] = {}
 
-        def _init_plug(*args: Any, **kwargs: Any) -> None:
-            """Prevent users from calling __init__() directly.
-
-            The __init__() method is only meant to be called by the provider
-            initialization process.
-            """
-            raise InitCalledDirectly(name)
-
-        _init_plug.__name__ = "__init__"
-
         for attr, value in namespace.items():
-            if attr == "__init__":
-                # The mandatory __init__() method is hijacked and hidden
-                # from the user.
-                value.__name__ = "__provider_init__"
-                new_ns["__provider_init__"] = classmethod(value)
-                new_ns["__init__"] = classmethod(_init_plug)
+            if attr in ("provider_init", "provider_dispose"):
+                new_ns[attr] = classmethod(value)
+            elif (
+                isinstance(value, FunctionType)
+                and not (attr.startswith("__") and attr.endswith("__"))
+            ):
+                guarded_func = _wrap_guarded_method(value)
+                new_ns[attr] = classmethod(guarded_func)
             else:
                 # Class methods, static methods, attributes with values are
                 # all passed as is.
                 new_ns[attr] = value
 
+        # Class variables with type annotations but without values (similar
+        # to dataclass fields) become guarded attributes and will trigger
+        # provider initialization, when accessed.
         guarded_attrs = {k for k in annotations.keys() if k not in new_ns}
         new_ns["__provider_guarded_attrs__"] = guarded_attrs
 
         cls: type = ABCMeta.__new__(mcls, name, bases, new_ns, **kwds)
+        providers: list[type] = type.__getattribute__(mcls, "__providers__")
+        if cls.__name__ != "BaseProvider":
+            providers.append(cls)
         return cls
 
     def __getattribute__(cls, name: str) -> Any:
@@ -111,7 +102,7 @@ class ProviderMetaclass(ABCMeta):
         type.__setattr__(cls, name, value)
 
     @staticmethod
-    def _ensure_setup_configured() -> None:
+    def _ensure_setup_hook_executed() -> None:
         # Run the one-time setup hook if it is defined. This is only done once
         # per runtime. It is designed to configure logging, disable warnings,
         # or monkey-patch things before the rest of the application starts.
@@ -120,8 +111,53 @@ class ProviderMetaclass(ABCMeta):
             and ProviderMetaclass.__provider_setup_hook__ is not None
         ):
             try:
-                ProviderMetaclass.__provider_setup_hook__()
+                result = ProviderMetaclass.__provider_setup_hook__()
                 ProviderMetaclass.__provider_setup_done__ = True
-                logger.info("Setup hook executed successfully.")
+                if result is None:
+                    summary = "Setup hook executed."
+                else:
+                    summary = f"Setup hook executed with result: {result}"
+                logger.info(summary)
             except Exception as e:
                 raise SetupError(e) from e
+            
+    @staticmethod
+    def _ensure_dispose_hook_executed() -> None:
+        # Call the provider_dispose() method of each provider in the reverse
+        # order of their initialization.
+        order = _sort_providers(ProviderMetaclass.__providers__)
+        dispose_order: list[tuple[str, Callable]] = []
+        for provider in reversed(order):
+            if hasattr(provider, "provider_dispose"):
+                func = type.__getattribute__(provider, "provider_dispose")
+                if callable(func):
+                    dispose_order.append((provider.__name__, func))
+
+        names = [t[0] for t in dispose_order]
+        logger.debug(f"Provider dispose call order: {names}")
+
+        for name, func in dispose_order:
+            try:
+                result = func()
+            except Exception as e:
+                raise DisposeError(e) from e
+            if result is None:
+                summary = f"Dispose hook for {name} was executed."
+            else:
+                summary = f"Dispose hook for {name} was executed with result: {result}"
+            logger.info(summary)
+
+        # Trigger an explicit @dispose hook, if it is defined.
+        if ProviderMetaclass.__provider_dispose_hook__ is not None:
+            try:
+                result = ProviderMetaclass.__provider_dispose_hook__()
+            except Exception as e:
+                raise DisposeError(e) from e
+            if result is None:
+                summary = "Dispose hook executed."
+            else:
+                summary = f"Dispose hook executed with result: {result}"
+            logger.info(summary)
+
+
+atexit.register(ProviderMetaclass._ensure_dispose_hook_executed)

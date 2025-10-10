@@ -1,6 +1,6 @@
 import pytest
 
-from init_provider import BaseProvider, init, requires
+from init_provider import BaseProvider, requires
 from init_provider.exceptions import ProviderDefinitionError
 
 
@@ -8,12 +8,11 @@ def test_requires_sets_dependency_attribute(clean_sys_modules):
     class ProviderSimple(BaseProvider):
         data: str
 
-        def __init__(self):
+        def provider_init(self):
             self.data = "simple_data"
 
     @requires(ProviderSimple)
     class TestProvider(BaseProvider):
-        @init
         def get_data(self):
             return ProviderSimple.data
 
@@ -24,12 +23,11 @@ def test_requires_sets_dependency_attribute(clean_sys_modules):
     class DummyProvider(BaseProvider):
         data: str
 
-        def __init__(self):
+        def provider_init(self):
             self.data = "dummy_data"
 
     @requires(TestProvider, ProviderSimple, DummyProvider)
     class MultiDepProvider(BaseProvider):
-        @init
         def get_data(self):
             return f"{TestProvider.get_data()}-{DummyProvider.data}"
 
@@ -49,7 +47,6 @@ def test_requires_raises_if_dependency_not_subclass_of_baseprovider(clean_sys_mo
         ProviderDefinitionError,
         match="Cannot use NotProvider as a dependency because it is not a subclass of BaseProvider",
     ):
-
         @requires(NotProvider)  # type: ignore[arg-type]
         class TestProvider(BaseProvider):
             pass
@@ -63,7 +60,6 @@ def test_requires_raises_if_decorated_class_not_baseprovider(clean_sys_modules):
         ProviderDefinitionError,
         match="Cannot use @requires on NotProvider because it is not a subclass of BaseProvider",
     ):
-
         @requires(TestProvider)  # type: ignore[arg-type]
         class NotProvider:
             pass
