@@ -7,14 +7,17 @@ Initialization and instance provider framework for Python.
 ![PyPI - Status](https://img.shields.io/pypi/status/init-provider)
 ![PyPI - License](https://img.shields.io/pypi/l/init-provider)
 
-- [Use cases](#use-cases)
-- [Quick Start](#quick-start)
+* **Init order**: for example, `ProviderA` depends on `ProviderB`.
+* **Reusable objects**: expose instances of Settings or a Connection Pool.
+* **Business logic**: clean internal APIs.
+* **Entry point**: use for a CLI, Web API, background worker, etc.
+
 - [Installation](#installation)
 - [Design patterns](#design-patterns)
 - [Usage](#usage)
   - [Inherit `BaseProvider`](#inherit-baseprovider)
   - [Store state in class variables](#store-state-in-class-variables)
-  - [Initialize inside `provider_init()`](#initialize-inside-provider_init)
+  - [Initialize with `__init__()`](#initialize-with-__init__)
   - [Add business logic](#add-business-logic)
   - [Specify dependencies with `@requires`](#specify-dependencies-with-requires)
 - [Examples](#examples)
@@ -23,35 +26,6 @@ Initialization and instance provider framework for Python.
 - [Troubleshooting](#troubleshooting)
   - [Enable logging](#enable-logging)
 - [License](#license)
-
-## Use cases
-
-* *Solve initialization hell*: Declare what depends on what and **forget about it**!
-* *Share object instances*: Expose a reusable instance of Settings or a Connection Pool.
-* *Business logic*: Implement clean internal APIs.
-* *Entry point*: Define an entry point for your CLI, Web API, background worker, etc.
-
-## Quick Start
-
-Runnable end‑to‑end example:
-
-```python
-from init_provider import BaseProvider, requires
-
-class Config(BaseProvider):
-    message: str
-
-    def provider_init(self) -> None:
-        self.message = "Hello"
-
-@requires(Config)
-class Greeter(BaseProvider):
-    def greet(self, name: str) -> str:
-        return f"{Config.message}, {name}!"
-
-if __name__ == "__main__":
-    print(Greeter.greet("World"))
-```
 
 ## Installation
 
@@ -112,13 +86,13 @@ class WeatherProvider(BaseProvider):
 *Note*: `init_provider` doesn't care about underscores in variable and
 method names. It will expose them all the same.
 
-### Initialize inside `provider_init()`
+### Initialize with `__init__()`
 
 When you need to initialize the provider, you can focus on **what** needs to
 be initialized rather than **when** it needs to be initialized.
 
 Not all providers require initialization, but when they do, you can define
-it inside the `provider_init()` method.
+it inside the `__init__()` method.
 
 For example, you might want to initialize a reusable [aiohttp][1] session
 during runtime, when the asyncio event loop is already running.
@@ -132,7 +106,7 @@ class WeatherProvider(BaseProvider):
     # ...
     _session: ClientSession
 
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         self._session = ClientSession()
 
 if __name__ == "__main__":
@@ -141,10 +115,10 @@ if __name__ == "__main__":
 ```
 
 *Note 1*: in the example aboev, the `_session` variable is declared without
-a value. The initialization is done inside the `provider_init()`.
+a value. The initialization is done inside the `__init__()`.
 Trying to access the `_session` object will trigger the initialization chain.
 
-*Note 2*: The `provider_init` method of the owner class is the only place
+*Note 2*: The `__init__` method of the owner class is the only place
 where initialization will not be triggered, when the object is accessed.
 
 *Warning*: Declaring a class variable with a default value will mean that it's

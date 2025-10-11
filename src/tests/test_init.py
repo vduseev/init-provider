@@ -6,6 +6,7 @@ from init_provider.exceptions import (
     InitError,
     SelfDependency,
     AttributeNotInitialized,
+    ProviderDefinitionError,
 )
 
 
@@ -13,10 +14,10 @@ def test_access_before_initialize(clean_sys_modules):
     class Provider(BaseProvider):
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self._init_counter += 1
 
-    assert Provider.__provider_initialized__ is False
+    assert Provider.__provider_created__ is False
     assert Provider._init_counter == 0
 
 
@@ -25,7 +26,7 @@ def test_assign_before_initialize(clean_sys_modules):
         data: str
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self.data = "data"
             self._init_counter += 1
 
@@ -37,7 +38,7 @@ def test_assign_before_initialize(clean_sys_modules):
     assert Provider._init_counter == 0
     assert Provider.data == "other"
     assert Provider.__provider_guarded_attrs__ == set()
-    assert Provider.__provider_initialized__ is False
+    assert Provider.__provider_created__ is False
     assert Provider._init_counter == 0
 
 
@@ -48,7 +49,7 @@ def test_dependency_order(clean_sys_modules):
         a: str
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self.a = "A"
             self._init_counter += 1
             order.append("A")
@@ -65,7 +66,7 @@ def test_dependency_order(clean_sys_modules):
         _init_counter = 0
         """init counter of provider B"""
 
-        def provider_init(self):
+        def __init__(self):
             self.b = "B"
             self._init_counter += 1
             order.append("B")
@@ -77,7 +78,7 @@ def test_dependency_order(clean_sys_modules):
         _init_counter = 0
         """init counter of provider C"""
 
-        def provider_init(self):
+        def __init__(self):
             self._init_counter += 1
             order.append("C")
 
@@ -112,7 +113,7 @@ def test_circular_dependency_detection(clean_sys_modules):
     """craft two providers with mutual @requires; importing class raises CircularDependency."""
 
     class CircularA(BaseProvider):
-        def provider_init(self):
+        def __init__(self):
             pass
 
         def get_a(self) -> str:
@@ -120,7 +121,7 @@ def test_circular_dependency_detection(clean_sys_modules):
 
     @requires(CircularA)
     class CircularB(BaseProvider):
-        def provider_init(self):
+        def __init__(self):
             pass
 
         def get_b(self) -> str:
@@ -142,7 +143,7 @@ def test_self_dependency_detection(clean_sys_modules):
         _init_counter = 0
         value: int
 
-        def provider_init(self):
+        def __init__(self):
             self.value = self.compute_value()
             self._init_counter += 1
 
@@ -159,7 +160,7 @@ def test_initialize_raise_exception(clean_sys_modules):
     class FailingProvider(BaseProvider):
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self._init_counter += 1
             raise ValueError("Database connection failed")
 
@@ -174,8 +175,24 @@ def test_attribute_unset_error(clean_sys_modules):
     class BadProvider(BaseProvider):
         unset_attribute: str
 
-        def provider_init(self):
+        def __init__(self):
             pass
 
     with pytest.raises(AttributeNotInitialized):
         BadProvider.unset_attribute
+
+
+def test_init_args(clean_sys_modules):
+
+    with pytest.raises(
+        ProviderDefinitionError,
+        match="Cannot use __init__ with arguments",
+    ):
+        class ProviderWithArgs(BaseProvider):
+            _init_counter = 0
+
+            def __init__(self, arg1: int, arg2: str):
+                self._init_counter += 1
+                self.arg1 = arg1
+                self.arg2 = arg2
+        

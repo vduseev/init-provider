@@ -8,7 +8,7 @@ def test_requires_sets_dependency_attribute(clean_sys_modules):
     class ProviderSimple(BaseProvider):
         data: str
 
-        def provider_init(self):
+        def __init__(self):
             self.data = "simple_data"
 
     @requires(ProviderSimple)
@@ -23,7 +23,7 @@ def test_requires_sets_dependency_attribute(clean_sys_modules):
     class DummyProvider(BaseProvider):
         data: str
 
-        def provider_init(self):
+        def __init__(self):
             self.data = "dummy_data"
 
     @requires(TestProvider, ProviderSimple, DummyProvider)

@@ -20,7 +20,7 @@ def test_setup_runs_once(clean_sys_modules):
         _sdata: str
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self._data = "data1"
             self._init_counter += 1
 
@@ -31,7 +31,7 @@ def test_setup_runs_once(clean_sys_modules):
         data: str
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self.data = "data2"
             self._init_counter += 1
 

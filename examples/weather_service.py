@@ -19,7 +19,7 @@ class WeatherService(BaseProvider):
     _session: ClientSession
     _base_url: str = "https://api.open-meteo.com/v1/forecast/"
     
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         # Properly initializing aiohttp session at runtime, when the
         # default asyncio loop is already running.
         self._session = ClientSession(self._base_url)
@@ -47,7 +47,7 @@ async def main():
     print(f"New York: {new_york:.2f}°C")
 
     # Release the resources. Normally, this would be implemented in the
-    # provider_dispose() method of the provider, but the async client must be closed
+    # __del__() method of the provider, but the async client must be closed
     # inside the same event loop it was created.
     await WeatherService.close()
     print(f"Is session closed: {WeatherService._session.closed}")

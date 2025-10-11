@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 import logging
 import threading
@@ -10,6 +9,7 @@ from typing import (
     ParamSpec,
     Concatenate,
     TYPE_CHECKING,
+    Any,
 )
 
 if TYPE_CHECKING:
@@ -19,6 +19,7 @@ from ..exceptions import (
     CircularDependency,
     DependencyChainMismatch,
     InitError,
+    InstantiationError,
     SelfDependency,
 )
 
@@ -30,22 +31,29 @@ _PT = TypeVar("_PT", bound="BaseProvider")
 
 logger = logging.getLogger("init_provider")
 _sync_init_lock = threading.RLock()
-"""Guarantee that two threads cannot call provider_init() of the same
+"""Guarantee that two threads cannot call __init__() of the same
 provider at the same time.
 """
 
 __all__ = [
+    "_get_init_plug",
     "_sort_providers",
     "_initialize_provider_chain",
     "_wrap_guarded_method",
 ]
 
 
-def _event_loop() -> asyncio.AbstractEventLoop | None:
-    try:
-        return asyncio.get_running_loop()
-    except RuntimeError:
-        return None
+def _get_init_plug(provider: str) -> Callable:
+    def _init_plug(*args: Any, **kwargs: Any) -> None:
+        """Prevent users from calling __init__() directly.
+        
+        The __init__() method is only meant to be called by the provider
+        initialization process.
+        """
+        raise InstantiationError(provider)
+    _init_plug.__name__ = "__init__"
+    _init_plug.__qualname__ = provider + ".__init__"
+    return _init_plug
 
 
 def _raise_on_circular_dependencies(
@@ -109,7 +117,7 @@ def _sort_providers(
 
     # Build dependency graph
     graph = defaultdict(set)
-    in_degree = defaultdict(int)
+    in_degree: dict[type["BaseProvider"], int] = defaultdict(int)
 
     for provider in providers:
         for dep in provider.__provider_dependencies__:
@@ -158,7 +166,7 @@ def _raise_on_self_dependency(
     try:
         while frame:
             if frame.f_code.co_qualname.endswith(
-                f"{cls.__name__}.provider_init",
+                f"{cls.__name__}.__init__",
             ):
                 raise SelfDependency(cls.__name__, method.__name__)
             frame = frame.f_back
@@ -171,7 +179,7 @@ def _initialize_provider_chain(
     requested_for: str,
 ) -> None:
     with _sync_init_lock:
-        if cls.__provider_initialized__:
+        if cls.__provider_created__:
             return
 
         # Call metaclass setup hook if it is defined.
@@ -188,7 +196,7 @@ def _initialize_provider_chain(
         # Make sure all dependencies of this provider are initialized
         order = _get_initialization_order(cls)
         order_status = [
-            f"{p.__name__}{' (initialized)' if p.__provider_initialized__ else ''}"
+            f"{p.__name__}{' (initialized)' if p.__provider_created__ else ''}"
             for p in order
         ]
         logger.debug(
@@ -196,13 +204,13 @@ def _initialize_provider_chain(
             f"{', '.join(order_status)}"
         )
         for p in order:
-            if not p.__provider_initialized__:
+            if not p.__provider_created__:
                 try:
                     logger.debug(f"Initializing provider {p.__name__}...")
-                    if hasattr(p, "provider_init"):
-                        if callable(p.provider_init):
-                            p.provider_init()
-                    p.__provider_initialized__ = True
+                    if hasattr(p, "__provider_init__"):
+                        if callable(p.__provider_init__):
+                            p.__provider_init__()
+                    p.__provider_created__ = True
                     logger.info(f"Provider {p.__name__} initialized")
                 except SelfDependency as e:
                     raise e
@@ -222,7 +230,7 @@ def _wrap_guarded_method(
         async def async_wrapper(
             cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs
         ) -> _R:  # type: ignore[override]
-            if not getattr(cls, "__provider_initialized__", False):
+            if not getattr(cls, "__provider_created__", False):
                 _raise_on_self_dependency(cls, f)
                 _initialize_provider_chain(cls, requested_for=f.__name__)
             return await f(cls, *args, **kwargs)
@@ -231,7 +239,7 @@ def _wrap_guarded_method(
 
     @wraps(f)
     def sync_wrapper(cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs) -> _R:  # type: ignore[override]
-        if not getattr(cls, "__provider_initialized__", False):
+        if not getattr(cls, "__provider_created__", False):
             _raise_on_self_dependency(cls, f)
             _initialize_provider_chain(cls, requested_for=f.__name__)
         return f(cls, *args, **kwargs)

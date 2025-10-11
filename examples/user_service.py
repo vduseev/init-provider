@@ -20,12 +20,12 @@ class DatabaseService(BaseProvider):
     """Single instance of connection ot SQLite."""
 
     # ↓ Any attempt to access a provider attribute outside
-    #   of provider_init() will cause the provider to be initialized.
+    #   of __init__() will cause the provider to be initialized.
     db_path: str
 
     # ↓ Initialize, just like in a dataclass. But you NEVER
     #   have to create an instance of a provider manually.
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         # Run some one-time initialization logic
         self.db_path = "database.db"
 
@@ -45,9 +45,8 @@ class DatabaseService(BaseProvider):
             )
             conn.commit()
 
-
     # ↓ Declare a dispose method to be called before the application exits.
-    def provider_dispose(self):
+    def __del__(self):
         os.unlink(self.db_path)
 
     # ↓ Any call to the `conn` method will cause the
@@ -63,7 +62,7 @@ class DatabaseService(BaseProvider):
 class UserService(BaseProvider):
     """Intenal API class to abstract the Users data layer."""
 
-    # → Notice: NO provider_init() method here! Because there is nothing
+    # → Notice: NO __init__() method here! Because there is nothing
     #   to initialize inside this specific provider itself.
 
     # ↓ Require initialization of all dependencies when this

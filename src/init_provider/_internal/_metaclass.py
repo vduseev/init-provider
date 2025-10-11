@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import inspect
 import logging
 from abc import ABCMeta
 from types import FunctionType
@@ -16,6 +17,7 @@ from ._utils import (
     _initialize_provider_chain,
     _sort_providers,
     _wrap_guarded_method,
+    _get_init_plug,
 )
 
 if TYPE_CHECKING:
@@ -26,8 +28,9 @@ logger = logging.getLogger("init_provider")
 __all__ = ["ProviderMetaclass"]
 
 
+
 class ProviderMetaclass(ABCMeta):
-    __providers__: list[type] = []
+    __provider_set__: set[type] = set()
     __provider_setup_done__: bool = False
     __provider_setup_hook__: Callable | None = None
     __provider_dispose_hook__: Callable | None = None
@@ -44,14 +47,34 @@ class ProviderMetaclass(ABCMeta):
         new_ns: dict[str, Any] = {}
 
         for attr, value in namespace.items():
-            if attr in ("provider_init", "provider_dispose"):
-                new_ns[attr] = classmethod(value)
+            if attr == "__init__":
+                init_args = inspect.getfullargspec(value).args
+                if len(init_args) > 1:
+                    raise ProviderDefinitionError(
+                        "Cannot use __init__ with arguments"
+                    )
+
+                provider_init = classmethod(value)
+                new_ns["__init__"] = _get_init_plug(name)
+                new_ns["__provider_init__"] = provider_init
+
+            elif attr == "__del__":
+                del_args = inspect.getfullargspec(value).args
+                if len(del_args) > 1:
+                    raise ProviderDefinitionError(
+                        "Cannot use __del__ with arguments"
+                    )
+
+                provider_dispose = classmethod(value)
+                new_ns["__provider_dispose__"] = provider_dispose
+
             elif (
                 isinstance(value, FunctionType)
                 and not (attr.startswith("__") and attr.endswith("__"))
             ):
                 guarded_func = _wrap_guarded_method(value)
                 new_ns[attr] = classmethod(guarded_func)
+
             else:
                 # Class methods, static methods, attributes with values are
                 # all passed as is.
@@ -64,9 +87,9 @@ class ProviderMetaclass(ABCMeta):
         new_ns["__provider_guarded_attrs__"] = guarded_attrs
 
         cls: type = ABCMeta.__new__(mcls, name, bases, new_ns, **kwds)
-        providers: list[type] = type.__getattribute__(mcls, "__providers__")
+        providers: set[type] = type.__getattribute__(mcls, "__provider_set__")
         if cls.__name__ != "BaseProvider":
-            providers.append(cls)
+            providers.add(cls)
         return cls
 
     def __getattribute__(cls, name: str) -> Any:
@@ -79,7 +102,7 @@ class ProviderMetaclass(ABCMeta):
         else:
             if name in guarded_attrs:
                 is_initialized: bool = type.__getattribute__(
-                    cls, "__provider_initialized__"
+                    cls, "__provider_created__"
                 )
                 if not is_initialized:
                     provider_cls = cast("type[BaseProvider]", cls)
@@ -107,8 +130,8 @@ class ProviderMetaclass(ABCMeta):
         # per runtime. It is designed to configure logging, disable warnings,
         # or monkey-patch things before the rest of the application starts.
         if (
-            not ProviderMetaclass.__provider_setup_done__
-            and ProviderMetaclass.__provider_setup_hook__ is not None
+            ProviderMetaclass.__provider_setup_hook__ is not None
+            and not ProviderMetaclass.__provider_setup_done__
         ):
             try:
                 result = ProviderMetaclass.__provider_setup_hook__()
@@ -123,13 +146,13 @@ class ProviderMetaclass(ABCMeta):
             
     @staticmethod
     def _ensure_dispose_hook_executed() -> None:
-        # Call the provider_dispose() method of each provider in the reverse
+        # Call the __del__() method of each provider in the reverse
         # order of their initialization.
-        order = _sort_providers(ProviderMetaclass.__providers__)
+        order = _sort_providers(ProviderMetaclass.__provider_set__)
         dispose_order: list[tuple[str, Callable]] = []
         for provider in reversed(order):
-            if hasattr(provider, "provider_dispose"):
-                func = type.__getattribute__(provider, "provider_dispose")
+            if hasattr(provider, "__provider_dispose__"):
+                func = type.__getattribute__(provider, "__provider_dispose__")
                 if callable(func):
                     dispose_order.append((provider.__name__, func))
 
