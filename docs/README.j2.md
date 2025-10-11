@@ -12,14 +12,15 @@ Initialization and instance provider framework for Python.
 * **Business logic**: clean internal APIs.
 * **Entry point**: use for a CLI, Web API, background worker, etc.
 
+- [Quick start](#quick-start)
 - [Installation](#installation)
-- [Design patterns](#design-patterns)
 - [Usage](#usage)
-  - [Inherit `BaseProvider`](#inherit-baseprovider)
-  - [Store state in class variables](#store-state-in-class-variables)
-  - [Initialize with `__init__()`](#initialize-with-__init__)
-  - [Add business logic](#add-business-logic)
-  - [Specify dependencies with `@requires`](#specify-dependencies-with-requires)
+  - [Inherit from `BaseProvider`](#inherit-from-baseprovider)
+  - [Store in class variables](#store-in-class-variables)
+  - [Initialize using `__init__()`](#initialize-using-__init__)
+  - [Dispose using `__del__()`](#dispose-using-__del__)
+  - [Decorate methods using `@init`](#decorate-methods-using-init)
+  - [Dependencies using `@requires`](#dependencies-using-requires)
 - [Examples](#examples)
   - [Weather service](#weather-service)
   - [User service](#user-service)
@@ -27,29 +28,34 @@ Initialization and instance provider framework for Python.
   - [Enable logging](#enable-logging)
 - [License](#license)
 
-## Installation
+## Quick start
 
-* Available on PyPI.
-* Pure Python with zero runtime dependencies.
-* Supports Python 3.10+.
+Below is a full runnable example that uses everything in this library.
 
-```bash
-# Using pip
-pip install init-provider
-
-# Using uv
-uv add init-provider
+```python
+{% include "full_example.py" %}
 ```
 
-## Design patterns
+Output:
 
-Write clean, testable, and maintainable code. `init-provider` lets you
-implement any of the common design patterns below in a very concise way:
+```shell
+$ uv run python examples/full_example.py
+{% include 'full_example.log' %}
+```
 
-* [Repository](https://martinfowler.com/eaaCatalog/repository.html): Abstract the data access layer (S3, SQL, REST, etc) and return Models.
-* Controller: Modify internal state based on requests from user or other systems.
-* Service: Implement business logic.
-* Singleton: Provide a single instance of a class, such as Settings.
+## Installation
+
+Using `pip`:
+
+```shell
+pip install init-provider
+```
+
+Using `uv`:
+
+```shell
+uv add init-provider
+```
 
 ## Usage
 
@@ -60,7 +66,7 @@ with three major differences:
 2. Providers can depend on each other.
 3. Calling any method or attribute of a provider will trigger initialization.
 
-### Inherit `BaseProvider`
+### Inherit from `BaseProvider`
 
 Create a class that inherits from `BaseProvider`. This automatically
 registers your provider inside the framework. 
@@ -72,9 +78,9 @@ class WeatherProvider(BaseProvider):
     """Fetch weather data from the API."""
 ```
 
-### Store state in class variables
+### Store in class variables
 
-Use class variables just like you would in a `dataclass`.
+Use class variables just like you would define fields in a `dataclass`.
 
 ```python
 # ...
@@ -86,7 +92,7 @@ class WeatherProvider(BaseProvider):
 *Note*: `init_provider` doesn't care about underscores in variable and
 method names. It will expose them all the same.
 
-### Initialize with `__init__()`
+### Initialize using `__init__()`
 
 When you need to initialize the provider, you can focus on **what** needs to
 be initialized rather than **when** it needs to be initialized.
@@ -123,11 +129,16 @@ where initialization will not be triggered, when the object is accessed.
 
 *Warning*: Declaring a class variable with a default value will mean that it's
 
-### Add business logic
+### Dispose using `__del__()`
+
+If you need to, you can dispose of resources in the `__del__()` method.
+An example of this is closing a database connection.
+
+### Decorate methods using `@init`
 
 Providers are great for encapsulating reusable business logic in a methods.
-Every method of the provider automatically becomes a guarded method. Guarded
-methods cause initialization of the provider chain, when they are called.
+Every provider method decorated with `@init` becomes guarded. Guarded
+methods cause initialization of the provider chain when they are called.
 
 *Note*: Reserved methods that contain double underscore (`__`) and methods
 decorated with `@staticmethod` or `@classmethod` will not be guarded.
@@ -137,12 +148,12 @@ from init_provider import BaseProvider
 
 class WeatherProvider(BaseProvider):
     # ...
-    @classmethod
+    @init
     def get_url(cls, path: str) -> str:
         return f"{cls._base_url}/{path}"
 ```
 
-### Specify dependencies with `@requires`
+### Dependencies using `@requires`
 
 Use the `@requires` decorator to list other providers that the
 `WeatherProvider` depends on.
@@ -151,19 +162,6 @@ Use the `@requires` decorator to list other providers that the
 @requires(GeoProvider)
 class WeatherProvider(BaseProvider):
     # ...
-```
-
-<a id="guard-methods"></a>
-Finally, guard the class methods that need everything to be initialized
-before they are called with the `@guarded` decorator.
-
-```python
-@requires(GeoProvider)
-class WeatherProvider(BaseProvider):
-    # ...
-    @guarded
-    def get_weather(cls, city: str) -> dict:
-        return cls._session.get(cls.get_url(f"weather?q={city}")).json()
 ```
 
 ## Examples

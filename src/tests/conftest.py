@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from init_provider import BaseProvider, requires
+from init_provider import BaseProvider, init, requires
 from init_provider._internal._metaclass import ProviderMetaclass
 
 
@@ -15,9 +15,11 @@ class UsersDatabase(BaseProvider):
         self._users = self.fetch()
         self._init_counter += 1
 
+    @init
     def get(self, id: int) -> str:
         return self._users[id]
 
+    @init
     def add(self, id: int, name: str) -> None:
         self._users[id] = name
 
@@ -37,6 +39,7 @@ class UsersCacheProvider(BaseProvider):
         self._users = {}
         self._init_counter += 1
 
+    @init
     def get(self, id: int) -> str:
         self._access_counter += 1
         if id not in self._users:
@@ -52,6 +55,7 @@ class UsersService(BaseProvider):
     def __init__(self):
         self._init_counter += 1
 
+    @init
     async def fetch(self) -> str:
         await asyncio.sleep(0)  # Yield control to event loop
         return "async_data"

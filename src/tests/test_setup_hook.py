@@ -1,6 +1,6 @@
 import pytest
 
-from init_provider import BaseProvider, setup
+from init_provider import BaseProvider, init, setup
 from init_provider.provider import ProviderMetaclass
 from init_provider.exceptions import ProviderDefinitionError
 
@@ -24,6 +24,7 @@ def test_setup_runs_once(clean_sys_modules):
             self._data = "data1"
             self._init_counter += 1
 
+        @init
         def set_data(self, data: str):
             self._data = data
 
@@ -53,7 +54,6 @@ def test_setup_raises_if_expects_arguments(clean_sys_modules):
         ProviderDefinitionError,
         match="is a function that expects arguments and cannot be used as a setup function",
     ):
-
         @setup  # type: ignore[arg-type]
         def test_setup(arg: str):
             pass

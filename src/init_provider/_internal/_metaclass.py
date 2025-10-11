@@ -16,7 +16,6 @@ from ..exceptions import (
 from ._utils import (
     _initialize_provider_chain,
     _sort_providers,
-    _wrap_guarded_method,
     _get_init_plug,
 )
 
@@ -72,8 +71,11 @@ class ProviderMetaclass(ABCMeta):
                 isinstance(value, FunctionType)
                 and not (attr.startswith("__") and attr.endswith("__"))
             ):
-                guarded_func = _wrap_guarded_method(value)
-                new_ns[attr] = classmethod(guarded_func)
+                raise ProviderDefinitionError(
+                    f"Method {name}.{attr} must be decorated with "
+                    "@classmethod, @staticmethod or @init to comply with "
+                    "the provider protocol"
+                )
 
             else:
                 # Class methods, static methods, attributes with values are

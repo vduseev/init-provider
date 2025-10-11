@@ -1,6 +1,6 @@
 import inspect
 
-from init_provider import BaseProvider
+from init_provider import BaseProvider, init
 from init_provider.provider import ProviderMetaclass
 
 
@@ -13,6 +13,7 @@ def test_basic(clean_sys_modules):
             self.guarded_attr = "A"
             self._init_counter += 1
 
+        @init
         def get_guarded_attr(self) -> str:
             return self.guarded_attr
 

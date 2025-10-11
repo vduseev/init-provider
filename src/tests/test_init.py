@@ -1,6 +1,6 @@
 import pytest
 
-from init_provider import BaseProvider, requires
+from init_provider import BaseProvider, init, requires
 from init_provider.exceptions import (
     CircularDependency,
     InitError,
@@ -54,6 +54,7 @@ def test_dependency_order(clean_sys_modules):
             self._init_counter += 1
             order.append("A")
 
+        @init
         def get_a(self) -> str:
             return self.a
 
@@ -82,6 +83,7 @@ def test_dependency_order(clean_sys_modules):
             self._init_counter += 1
             order.append("C")
 
+        @init
         def get_abc(self) -> str:
             """Docstring of get_abc method"""
             return f"{ProviderA.a}{ProviderB.b}{self.c}"
@@ -116,6 +118,7 @@ def test_circular_dependency_detection(clean_sys_modules):
         def __init__(self):
             pass
 
+        @init
         def get_a(self) -> str:
             return "a"
 
@@ -124,6 +127,7 @@ def test_circular_dependency_detection(clean_sys_modules):
         def __init__(self):
             pass
 
+        @init
         def get_b(self) -> str:
             return "b"
 
@@ -147,6 +151,7 @@ def test_self_dependency_detection(clean_sys_modules):
             self.value = self.compute_value()
             self._init_counter += 1
 
+        @init
         def compute_value(self) -> int:
             return self._init_counter
 
@@ -164,6 +169,7 @@ def test_initialize_raise_exception(clean_sys_modules):
             self._init_counter += 1
             raise ValueError("Database connection failed")
 
+        @init
         def get_counter(self):
             return self._init_counter
 

@@ -4,10 +4,12 @@ from collections.abc import Callable
 from typing import (
     ParamSpec,
     TypeVar,
+    Concatenate,
 )
 
 from .exceptions import ProviderDefinitionError
 from .provider import BaseProvider, ProviderMetaclass
+from ._internal._utils import _wrap_guarded_method
 
 
 _P = ParamSpec("_P")
@@ -17,7 +19,76 @@ _PT = TypeVar("_PT", bound=BaseProvider)
 
 
 logger = logging.getLogger("init_provider")
-__all__ = ["requires", "setup"]
+__all__ = ["init", "requires", "setup"]
+
+
+def init(
+    func: Callable[Concatenate[type[_PT], _P], _R] | classmethod,
+    /,
+) -> classmethod:
+    """Ensure provider and dependencies are initialized when this method is called.
+
+    This decorator is equivalent to @classmethod, but it also ensures that
+    the provider and its dependencies are initialized before the method is
+    executed.
+
+    Args:
+        func: The method to be guarded.
+
+    Note:
+        - Works with both synchronous and asynchronous methods
+        - Every provider is only ever initialized once
+        - Cannot be called from within the same provider's __init__() method
+
+    Examples:
+
+        Basic usage:
+        ```python
+        @requires(DatabaseProvider)
+        class UserProvider(BaseProvider):
+            @init
+            def get_user(self, user_id: int) -> User:
+                # DatabaseProvider guaranteed to be initialized here
+                return DatabaseProvider.fetch_user(user_id)
+        ```
+
+        Async method:
+        ```python
+        @requires(APIProvider)
+        class WeatherProvider(BaseProvider):
+            @init
+            async def get_weather(self, city: str) -> Weather:
+                # APIProvider guaranteed to be initialized here
+                return await APIProvider.fetch_weather(city)
+        ```
+
+        Multiple dependencies and context manager:
+        ```python
+        @requires(DatabaseProvider, CacheProvider, MetricsProvider)
+        class UserProvider(BaseProvider):
+            @init
+            @asynccontextmanager
+            async def get_user_with_metrics(self, user_id: int) -> AsyncGenerator[User, None]:
+                # All three providers
+
+                cached = CacheProvider.get(f'user:{user_id}')
+                if cached:
+                    yield cached
+
+                user = DatabaseProvider.fetch_user(user_id)
+                CacheProvider.set(f'user:{user_id}', user)
+                yield user
+        ```
+    """
+    func_ = func.__func__ if isinstance(func, classmethod) else func
+    if func_.__name__ in ("__init__", "__del__"):
+        raise ProviderDefinitionError(
+            f"{func_.__qualname__} is a reserved method and cannot be "
+            "decorated with @init."
+        )
+
+    guarded_func = _wrap_guarded_method(func_)
+    return classmethod(guarded_func)
 
 
 def requires(
@@ -118,7 +189,6 @@ def setup(func: Callable[[], _R_co]) -> Callable[[], _R_co]:
         )
 
     ProviderMetaclass.__provider_setup_hook__ = func  # type: ignore[attr-defined]
-    logger.debug(f"Setup hook registered: {func.__qualname__}")
     return func
 
 
@@ -151,5 +221,4 @@ def dispose(func: Callable[[], _R_co]) -> Callable[[], _R_co]:
         )
 
     ProviderMetaclass.__provider_dispose_hook__ = func  # type: ignore[attr-defined]
-    logger.debug(f"Dispose hook registered: {func.__qualname__}")
     return func

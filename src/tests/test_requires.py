@@ -1,6 +1,6 @@
 import pytest
 
-from init_provider import BaseProvider, requires
+from init_provider import BaseProvider, init, requires
 from init_provider.exceptions import ProviderDefinitionError
 
 
@@ -13,6 +13,7 @@ def test_requires_sets_dependency_attribute(clean_sys_modules):
 
     @requires(ProviderSimple)
     class TestProvider(BaseProvider):
+        @init
         def get_data(self):
             return ProviderSimple.data
 
@@ -28,6 +29,7 @@ def test_requires_sets_dependency_attribute(clean_sys_modules):
 
     @requires(TestProvider, ProviderSimple, DummyProvider)
     class MultiDepProvider(BaseProvider):
+        @init
         def get_data(self):
             return f"{TestProvider.get_data()}-{DummyProvider.data}"
 

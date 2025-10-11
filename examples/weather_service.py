@@ -1,11 +1,12 @@
 import asyncio
 import logging
 from aiohttp import ClientSession
-from init_provider import BaseProvider, requires
+from init_provider import BaseProvider, init, requires
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s %(message)s")
 
 class GeoService(BaseProvider):
+    @init
     def city_coordinates(self, name: str) -> tuple[float, float]:
         """Returns the latitude and longitude of a city."""
         if name == "London":
@@ -28,6 +29,7 @@ class WeatherService(BaseProvider):
     async def close(cls):
         await cls._session.close()
 
+    @init
     async def temperature(self, city: str) -> float:
         lat, lon = GeoService.city_coordinates(city)
         params = {"latitude": lat, "longitude": lon, "hourly": "temperature_2m"}

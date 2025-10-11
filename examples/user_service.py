@@ -5,7 +5,7 @@ import warnings
 from contextlib import contextmanager
 from typing import Generator
 
-from init_provider import BaseProvider, requires, setup
+from init_provider import BaseProvider, init, requires, setup
 
 # (Optional) Declare a setup function to be executed once per application
 # process before any provider is initialized.
@@ -51,6 +51,7 @@ class DatabaseService(BaseProvider):
 
     # ↓ Any call to the `conn` method will cause the
     #   provider to be initialized, if not already done.
+    @init
     @contextmanager
     def conn(self) -> Generator[sqlite3.Connection, None, None]:
         """One-time connection to the database."""
@@ -67,6 +68,7 @@ class UserService(BaseProvider):
 
     # ↓ Require initialization of all dependencies when this
     #   method is called.
+    @init
     def get_name(self, user_id: int) -> str | None:
         """Get user name based on ID"""
 

@@ -28,6 +28,7 @@ check-tools: ## Verify required tools are present
 	fi
 	
 readme: check-tools ## Render README.md
+	@$(UV) run python examples/full_example.py &> examples/full_example.log
 	@$(UV) run python examples/user_service.py &> examples/user_service.log
 	@$(UV) run python examples/weather_service.py &> examples/weather_service.log
 	@$(UV) run jinjitsu docs/README.j2.md -s examples/ > README.md
