@@ -5,7 +5,8 @@ import warnings
 from contextlib import contextmanager
 from typing import Generator
 
-from init_provider import BaseProvider, requires, setup
+from init_provider import BaseProvider, init, requires, setup
+
 
 # (Optional) Declare a setup function to be executed once per application
 # process before any provider is initialized.
@@ -15,17 +16,18 @@ def configure():
     logging.basicConfig(level=logging.DEBUG, format=log_format)
     warnings.filterwarnings("ignore", module="some_module")
 
-# ↓ Basic provider. Exposes 1 attribute: connection 
+
+# ↓ Basic provider. Exposes 1 attribute: connection
 class DatabaseService(BaseProvider):
     """Single instance of connection ot SQLite."""
 
     # ↓ Any attempt to access a provider attribute outside
-    #   of provider_init() will cause the provider to be initialized.
+    #   of __init__() will cause the provider to be initialized.
     db_path: str
 
     # ↓ Initialize, just like in a dataclass. But you NEVER
     #   have to create an instance of a provider manually.
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         # Run some one-time initialization logic
         self.db_path = "database.db"
 
@@ -45,29 +47,31 @@ class DatabaseService(BaseProvider):
             )
             conn.commit()
 
-
     # ↓ Declare a dispose method to be called before the application exits.
-    def provider_dispose(self):
+    def __del__(self):
         os.unlink(self.db_path)
 
     # ↓ Any call to the `conn` method will cause the
     #   provider to be initialized, if not already done.
+    @init
     @contextmanager
     def conn(self) -> Generator[sqlite3.Connection, None, None]:
         """One-time connection to the database."""
         with sqlite3.connect(self.db_path) as conn:
             yield conn
 
+
 # ↓ This one depends on another provider.
 @requires(DatabaseService)
 class UserService(BaseProvider):
     """Intenal API class to abstract the Users data layer."""
 
-    # → Notice: NO provider_init() method here! Because there is nothing
+    # → Notice: NO __init__() method here! Because there is nothing
     #   to initialize inside this specific provider itself.
 
     # ↓ Require initialization of all dependencies when this
     #   method is called.
+    @init
     def get_name(self, user_id: int) -> str | None:
         """Get user name based on ID"""
 
@@ -80,6 +84,7 @@ class UserService(BaseProvider):
                 return result[0]
             else:
                 return None
+
 
 if __name__ == "__main__":
     # ↓ This will cause the chain of dependencies to be

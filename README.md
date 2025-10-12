@@ -7,16 +7,20 @@ Initialization and instance provider framework for Python.
 ![PyPI - Status](https://img.shields.io/pypi/status/init-provider)
 ![PyPI - License](https://img.shields.io/pypi/l/init-provider)
 
-- [Use cases](#use-cases)
-- [Quick Start](#quick-start)
+* **Init order**: for example, `ProviderA` depends on `ProviderB`.
+* **Reusable objects**: expose instances of Settings or a Connection Pool.
+* **Business logic**: clean internal APIs.
+* **Entry point**: use for a CLI, Web API, background worker, etc.
+
+- [Quick start](#quick-start)
 - [Installation](#installation)
-- [Design patterns](#design-patterns)
 - [Usage](#usage)
-  - [Inherit `BaseProvider`](#inherit-baseprovider)
-  - [Store state in class variables](#store-state-in-class-variables)
-  - [Initialize inside `provider_init()`](#initialize-inside-provider_init)
-  - [Add business logic](#add-business-logic)
-  - [Specify dependencies with `@requires`](#specify-dependencies-with-requires)
+  - [Inherit from `BaseProvider`](#inherit-from-baseprovider)
+  - [Store in class variables](#store-in-class-variables)
+  - [Initialize using `__init__()`](#initialize-using-__init__)
+  - [Dispose using `__del__()`](#dispose-using-__del__)
+  - [Decorate methods using `@init`](#decorate-methods-using-init)
+  - [Dependencies using `@requires`](#dependencies-using-requires)
 - [Examples](#examples)
   - [Weather service](#weather-service)
   - [User service](#user-service)
@@ -24,58 +28,121 @@ Initialization and instance provider framework for Python.
   - [Enable logging](#enable-logging)
 - [License](#license)
 
-## Use cases
+## Quick start
 
-* *Solve initialization hell*: Declare what depends on what and **forget about it**!
-* *Share object instances*: Expose a reusable instance of Settings or a Connection Pool.
-* *Business logic*: Implement clean internal APIs.
-* *Entry point*: Define an entry point for your CLI, Web API, background worker, etc.
-
-## Quick Start
-
-Runnable end‑to‑end example:
+Below is a full runnable example that uses everything in this library.
 
 ```python
-from init_provider import BaseProvider, requires
+import logging
+from pathlib import Path
+from init_provider import BaseProvider, init, requires, setup, dispose
 
-class Config(BaseProvider):
-    message: str
 
-    def provider_init(self) -> None:
-        self.message = "Hello"
+@setup
+def configure() -> None:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(levelname)-8s %(name)-15s %(message)s",
+    )
+    if not Path("file.txt").exists():
+        logging.info("> file.txt does not yet exist")
 
-@requires(Config)
+
+@dispose
+def cleanup() -> None:
+    if not Path("file.txt").exists():
+        logging.info("> file.txt no longer exist")
+
+
+class Storage(BaseProvider):
+    path = Path("file.txt")
+
+    def __init__(self):
+        logging.info("> create Storage")
+        self.path.touch()
+
+    def __del__(self):
+        logging.info("> dispose of Storage")
+        self.path.unlink()
+
+    @init
+    def write(self, content: str) -> None:
+        logging.info(f"> write to Storage: {content}")
+        self.path.write_text(content)
+
+    @init
+    def read(self) -> str:
+        data = self.path.read_text()
+        logging.info(f"> read from Storage: {data}")
+        return data
+
+
+@requires(Storage)
+class Namer(BaseProvider):
+    def __init__(self) -> None:
+        logging.info("> create Namer")
+        Storage.write("Bobby")
+
+
+@requires(Namer)
 class Greeter(BaseProvider):
-    def greet(self, name: str) -> str:
-        return f"{Config.message}, {name}!"
+    define_at_runtime: str
+
+    def __init__(self):
+        logging.info("> create Greeter")
+        self.define_at_runtime = Storage.read()
+
+    @init
+    def greet(self) -> None:
+        print(f">>> Hello, {self.define_at_runtime}!")
+
 
 if __name__ == "__main__":
-    print(Greeter.greet("World"))
+    Greeter.greet()
+```
+
+Output:
+
+```shell
+$ uv run python examples/full_example.py
+INFO     root            > file.txt does not yet exist
+INFO     init_provider   Setup hook executed.
+DEBUG    init_provider   About to initialize provider Greeter because of: greet
+DEBUG    init_provider   Initialization order for provider Greeter is: Storage, Namer, Greeter
+DEBUG    init_provider   Initializing provider Storage...
+INFO     root            > create Storage
+INFO     init_provider   Provider Storage initialized
+DEBUG    init_provider   Initializing provider Namer...
+INFO     root            > create Namer
+INFO     root            > write to Storage: Bobby
+INFO     init_provider   Provider Namer initialized
+DEBUG    init_provider   Initializing provider Greeter...
+INFO     root            > create Greeter
+INFO     root            > read from Storage: Bobby
+INFO     init_provider   Provider Greeter initialized
+>>> Hello, Bobby!
+DEBUG    init_provider   Provider dispose call order: ['Greeter', 'Namer', 'Storage']
+INFO     init_provider   Dispose hook for Greeter was executed.
+INFO     init_provider   Dispose hook for Namer was executed.
+INFO     root            > dispose of Storage
+INFO     init_provider   Dispose hook for Storage was executed.
+INFO     root            > file.txt no longer exist
+INFO     init_provider   Dispose hook executed.
 ```
 
 ## Installation
 
-* Available on PyPI.
-* Pure Python with zero runtime dependencies.
-* Supports Python 3.10+.
+Using `pip`:
 
-```bash
-# Using pip
+```shell
 pip install init-provider
-
-# Using uv
-uv add init-provider
 ```
 
-## Design patterns
+Using `uv`:
 
-Write clean, testable, and maintainable code. `init-provider` lets you
-implement any of the common design patterns below in a very concise way:
-
-* [Repository](https://martinfowler.com/eaaCatalog/repository.html): Abstract the data access layer (S3, SQL, REST, etc) and return Models.
-* Controller: Modify internal state based on requests from user or other systems.
-* Service: Implement business logic.
-* Singleton: Provide a single instance of a class, such as Settings.
+```shell
+uv add init-provider
+```
 
 ## Usage
 
@@ -86,7 +153,7 @@ with three major differences:
 2. Providers can depend on each other.
 3. Calling any method or attribute of a provider will trigger initialization.
 
-### Inherit `BaseProvider`
+### Inherit from `BaseProvider`
 
 Create a class that inherits from `BaseProvider`. This automatically
 registers your provider inside the framework. 
@@ -98,9 +165,9 @@ class WeatherProvider(BaseProvider):
     """Fetch weather data from the API."""
 ```
 
-### Store state in class variables
+### Store in class variables
 
-Use class variables just like you would in a `dataclass`.
+Use class variables just like you would define fields in a `dataclass`.
 
 ```python
 # ...
@@ -112,13 +179,13 @@ class WeatherProvider(BaseProvider):
 *Note*: `init_provider` doesn't care about underscores in variable and
 method names. It will expose them all the same.
 
-### Initialize inside `provider_init()`
+### Initialize using `__init__()`
 
 When you need to initialize the provider, you can focus on **what** needs to
 be initialized rather than **when** it needs to be initialized.
 
 Not all providers require initialization, but when they do, you can define
-it inside the `provider_init()` method.
+it inside the `__init__()` method.
 
 For example, you might want to initialize a reusable [aiohttp][1] session
 during runtime, when the asyncio event loop is already running.
@@ -132,7 +199,7 @@ class WeatherProvider(BaseProvider):
     # ...
     _session: ClientSession
 
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         self._session = ClientSession()
 
 if __name__ == "__main__":
@@ -141,19 +208,24 @@ if __name__ == "__main__":
 ```
 
 *Note 1*: in the example aboev, the `_session` variable is declared without
-a value. The initialization is done inside the `provider_init()`.
+a value. The initialization is done inside the `__init__()`.
 Trying to access the `_session` object will trigger the initialization chain.
 
-*Note 2*: The `provider_init` method of the owner class is the only place
+*Note 2*: The `__init__` method of the owner class is the only place
 where initialization will not be triggered, when the object is accessed.
 
 *Warning*: Declaring a class variable with a default value will mean that it's
 
-### Add business logic
+### Dispose using `__del__()`
+
+If you need to, you can dispose of resources in the `__del__()` method.
+An example of this is closing a database connection.
+
+### Decorate methods using `@init`
 
 Providers are great for encapsulating reusable business logic in a methods.
-Every method of the provider automatically becomes a guarded method. Guarded
-methods cause initialization of the provider chain, when they are called.
+Every provider method decorated with `@init` becomes guarded. Guarded
+methods cause initialization of the provider chain when they are called.
 
 *Note*: Reserved methods that contain double underscore (`__`) and methods
 decorated with `@staticmethod` or `@classmethod` will not be guarded.
@@ -163,12 +235,12 @@ from init_provider import BaseProvider
 
 class WeatherProvider(BaseProvider):
     # ...
-    @classmethod
+    @init
     def get_url(cls, path: str) -> str:
         return f"{cls._base_url}/{path}"
 ```
 
-### Specify dependencies with `@requires`
+### Dependencies using `@requires`
 
 Use the `@requires` decorator to list other providers that the
 `WeatherProvider` depends on.
@@ -179,19 +251,6 @@ class WeatherProvider(BaseProvider):
     # ...
 ```
 
-<a id="guard-methods"></a>
-Finally, guard the class methods that need everything to be initialized
-before they are called with the `@guarded` decorator.
-
-```python
-@requires(GeoProvider)
-class WeatherProvider(BaseProvider):
-    # ...
-    @guarded
-    def get_weather(cls, city: str) -> dict:
-        return cls._session.get(cls.get_url(f"weather?q={city}")).json()
-```
-
 ## Examples
 
 ### Weather service
@@ -200,11 +259,13 @@ class WeatherProvider(BaseProvider):
 import asyncio
 import logging
 from aiohttp import ClientSession
-from init_provider import BaseProvider, requires
+from init_provider import BaseProvider, init, requires
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s %(message)s")
 
+
 class GeoService(BaseProvider):
+    @init
     def city_coordinates(self, name: str) -> tuple[float, float]:
         """Returns the latitude and longitude of a city."""
         if name == "London":
@@ -213,12 +274,13 @@ class GeoService(BaseProvider):
             return 40.7128, -74.0060  # New York, USA
         raise ValueError(f"Unknown city: {name}")
 
+
 @requires(GeoService)
 class WeatherService(BaseProvider):
     _session: ClientSession
     _base_url: str = "https://api.open-meteo.com/v1/forecast/"
-    
-    def provider_init(self) -> None:
+
+    def __init__(self) -> None:
         # Properly initializing aiohttp session at runtime, when the
         # default asyncio loop is already running.
         self._session = ClientSession(self._base_url)
@@ -227,12 +289,18 @@ class WeatherService(BaseProvider):
     async def close(cls):
         await cls._session.close()
 
+    @init
     async def temperature(self, city: str) -> float:
         lat, lon = GeoService.city_coordinates(city)
-        params = {"latitude": lat, "longitude": lon, "hourly": "temperature_2m"}
+        params: dict[str, str | float] = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "temperature_2m",
+        }
         async with self._session.get(self._base_url, params=params) as resp:
             data = await resp.json()
             return data["hourly"]["temperature_2m"][0]
+
 
 async def main():
     # This will immediately initialize WeatherService and its dependencies,
@@ -240,13 +308,13 @@ async def main():
     print(f"Is session closed: {WeatherService._session.closed}")
 
     # Subsequent calls do not reinitialize the provider.
-    london = await WeatherService.temperature('London')
-    new_york = await WeatherService.temperature('New York')
+    london = await WeatherService.temperature("London")
+    new_york = await WeatherService.temperature("New York")
     print(f"London: {london:.2f}°C")
     print(f"New York: {new_york:.2f}°C")
 
     # Release the resources. Normally, this would be implemented in the
-    # provider_dispose() method of the provider, but the async client must be closed
+    # __del__() method of the provider, but the async client must be closed
     # inside the same event loop it was created.
     await WeatherService.close()
     print(f"Is session closed: {WeatherService._session.closed}")
@@ -268,8 +336,8 @@ INFO     Provider GeoService initialized
 DEBUG    Initializing provider WeatherService...
 INFO     Provider WeatherService initialized
 Is session closed: False
-London: 13.10°C
-New York: 11.30°C
+London: 11.40°C
+New York: 16.50°C
 Is session closed: True
 DEBUG    Provider dispose call order: ['WeatherService', 'GeoService']
 INFO     Dispose hook for WeatherService was executed.
@@ -286,7 +354,8 @@ import warnings
 from contextlib import contextmanager
 from typing import Generator
 
-from init_provider import BaseProvider, requires, setup
+from init_provider import BaseProvider, init, requires, setup
+
 
 # (Optional) Declare a setup function to be executed once per application
 # process before any provider is initialized.
@@ -296,17 +365,18 @@ def configure():
     logging.basicConfig(level=logging.DEBUG, format=log_format)
     warnings.filterwarnings("ignore", module="some_module")
 
-# ↓ Basic provider. Exposes 1 attribute: connection 
+
+# ↓ Basic provider. Exposes 1 attribute: connection
 class DatabaseService(BaseProvider):
     """Single instance of connection ot SQLite."""
 
     # ↓ Any attempt to access a provider attribute outside
-    #   of provider_init() will cause the provider to be initialized.
+    #   of __init__() will cause the provider to be initialized.
     db_path: str
 
     # ↓ Initialize, just like in a dataclass. But you NEVER
     #   have to create an instance of a provider manually.
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         # Run some one-time initialization logic
         self.db_path = "database.db"
 
@@ -326,29 +396,31 @@ class DatabaseService(BaseProvider):
             )
             conn.commit()
 
-
     # ↓ Declare a dispose method to be called before the application exits.
-    def provider_dispose(self):
+    def __del__(self):
         os.unlink(self.db_path)
 
     # ↓ Any call to the `conn` method will cause the
     #   provider to be initialized, if not already done.
+    @init
     @contextmanager
     def conn(self) -> Generator[sqlite3.Connection, None, None]:
         """One-time connection to the database."""
         with sqlite3.connect(self.db_path) as conn:
             yield conn
 
+
 # ↓ This one depends on another provider.
 @requires(DatabaseService)
 class UserService(BaseProvider):
     """Intenal API class to abstract the Users data layer."""
 
-    # → Notice: NO provider_init() method here! Because there is nothing
+    # → Notice: NO __init__() method here! Because there is nothing
     #   to initialize inside this specific provider itself.
 
     # ↓ Require initialization of all dependencies when this
     #   method is called.
+    @init
     def get_name(self, user_id: int) -> str | None:
         """Get user name based on ID"""
 
@@ -361,6 +433,7 @@ class UserService(BaseProvider):
                 return result[0]
             else:
                 return None
+
 
 if __name__ == "__main__":
     # ↓ This will cause the chain of dependencies to be

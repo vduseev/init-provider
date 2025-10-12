@@ -96,7 +96,7 @@ class SetupError(ProviderError):
 
 
 class DisposeError(ProviderError):
-    """Raised when the @dispose hook or a provider_dispose() method fails."""
+    """Raised when the @dispose hook or a __del__() method fails."""
 
     def __init__(self, exception: Exception):
         super().__init__(f"Error while disposing: {exception}")
@@ -109,7 +109,7 @@ class InitError(ProviderError):
 
         ```python
         class DatabaseProvider(BaseProvider):
-            def provider_init(self) -> None:
+            def __init__(self) -> None:
                 # This might raise an exception
                 self._connection = connect_to_database()
         ```
@@ -128,15 +128,22 @@ class InitError(ProviderError):
         )
 
 
+class InstantiationError(ProviderError):
+    """Raised when instantiation of a provider class is attempted."""
+
+    def __init__(self, provider: str):
+        super().__init__(f"Provider {provider} was instantiated directly.")
+
+
 class SelfDependency(ProviderError):
-    """Provider method was called from within provider_init().
+    """Provider method was called from within __init__().
 
     Calling provider method causes the provider and its dependencies to be
     initialized, if they weren't already. This is why calling a provider
-    method inside provider_init() creates a self dependency loop.
+    method inside __init__() creates a self dependency loop.
 
     Methods decorated with @classmethod or @staticmethod can be called from
-    within provider_init() without causing a self dependency loop, but cannot
+    within __init__() without causing a self dependency loop, but cannot
     rely on uninitialized attributes.
 
     Example:
@@ -144,7 +151,7 @@ class SelfDependency(ProviderError):
         class UserProvider(BaseProvider):
             users: list[str]
 
-            def provider_init(self) -> None:
+            def __init__(self) -> None:
                 self.users = self.load_users() # ← This is fine.
                 self.add_user("user3") # ← This will raise SelfDependency.
 
@@ -159,8 +166,7 @@ class SelfDependency(ProviderError):
 
     def __init__(self, name: str, method: str):
         super().__init__(
-            f"Method {method} was called in provider_init() "
-            f"of its class {name}"
+            f"Method {method} was called in __init__() of its class {name}"
         )
 
 

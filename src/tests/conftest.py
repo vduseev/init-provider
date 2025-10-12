@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from init_provider import BaseProvider, requires
+from init_provider import BaseProvider, init, requires
 from init_provider._internal._metaclass import ProviderMetaclass
 
 
@@ -11,13 +11,15 @@ class UsersDatabase(BaseProvider):
     _init_counter = 0
     _users: dict[int, str] = {}
 
-    def provider_init(self):
+    def __init__(self):
         self._users = self.fetch()
         self._init_counter += 1
 
+    @init
     def get(self, id: int) -> str:
         return self._users[id]
 
+    @init
     def add(self, id: int, name: str) -> None:
         self._users[id] = name
 
@@ -33,10 +35,11 @@ class UsersCacheProvider(BaseProvider):
     _access_limit = 2
     _users: dict[int, str]
 
-    def provider_init(self):
+    def __init__(self):
         self._users = {}
         self._init_counter += 1
 
+    @init
     def get(self, id: int) -> str:
         self._access_counter += 1
         if id not in self._users:
@@ -49,9 +52,10 @@ class UsersCacheProvider(BaseProvider):
 class UsersService(BaseProvider):
     _init_counter = 0
 
-    def provider_init(self):
+    def __init__(self):
         self._init_counter += 1
 
+    @init
     async def fetch(self) -> str:
         await asyncio.sleep(0)  # Yield control to event loop
         return "async_data"
@@ -75,4 +79,4 @@ def clean_sys_modules():
     ProviderMetaclass.__provider_setup_done__ = False
     ProviderMetaclass.__provider_setup_hook__ = None
     ProviderMetaclass.__provider_dispose_hook__ = None
-    ProviderMetaclass.__providers__ = []
+    ProviderMetaclass.__provider_set__ = set()

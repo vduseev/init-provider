@@ -20,7 +20,7 @@ class BaseProvider(ABC, metaclass=ProviderMetaclass):
         RuntimeError: When attempting to create an instance of a provider.
 
     Example:
-    
+
         ```python
         @requires(DatabaseProvider, CacheProvider)
         class UserCache(BaseProvider):
@@ -28,11 +28,11 @@ class BaseProvider(ABC, metaclass=ProviderMetaclass):
             refresh_timestamp: datetime
             refresh_interval: timedelta = timedelta(minutes=10)
 
-            def provider_init(self) -> None:
+            def __init__(self) -> None:
                 # Load initial data
                 self.refresh()
 
-            def provider_dispose(self) -> None:
+            def __del__(self) -> None:
                 # Cache users on application exit
                 CacheProvider.store(self.users)
 
@@ -48,7 +48,7 @@ class BaseProvider(ABC, metaclass=ProviderMetaclass):
         ```
     """
 
-    __provider_initialized__: bool = False
+    __provider_created__: bool = False
     __provider_disposed__: bool = False
     __provider_dependencies__: set[type["BaseProvider"]] = set()
     __provider_guarded_attrs__: set[str] = set()
@@ -81,10 +81,10 @@ class BaseProvider(ABC, metaclass=ProviderMetaclass):
             "Use class methods directly instead."
         )
 
-    def provider_init(self) -> None:
+    def __init__(self) -> None:
         """Initialize the provider lazily."""
         pass
 
-    def provider_dispose(self) -> None:
+    def __del__(self) -> None:
         """Dispose of the provider."""
         pass

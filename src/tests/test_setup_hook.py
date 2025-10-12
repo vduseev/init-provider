@@ -1,6 +1,6 @@
 import pytest
 
-from init_provider import BaseProvider, setup
+from init_provider import BaseProvider, init, setup
 from init_provider.provider import ProviderMetaclass
 from init_provider.exceptions import ProviderDefinitionError
 
@@ -20,10 +20,11 @@ def test_setup_runs_once(clean_sys_modules):
         _sdata: str
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self._data = "data1"
             self._init_counter += 1
 
+        @init
         def set_data(self, data: str):
             self._data = data
 
@@ -31,7 +32,7 @@ def test_setup_runs_once(clean_sys_modules):
         data: str
         _init_counter = 0
 
-        def provider_init(self):
+        def __init__(self):
             self.data = "data2"
             self._init_counter += 1
 
