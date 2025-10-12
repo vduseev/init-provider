@@ -26,6 +26,7 @@ Initialization and instance provider framework for Python.
   - [User service](#user-service)
 - [Troubleshooting](#troubleshooting)
   - [Enable logging](#enable-logging)
+- [Design choices](#design-choices)
 - [License](#license)
 
 ## Quick start
@@ -217,6 +218,172 @@ DEBUG    Initializing provider GeoService...
 INFO     Provider GeoService initialized successfully
 DEBUG    Initializing provider WeatherService...
 ```
+
+## Design choices
+
+* `BaseProvider` inheritance instead of `@provider` decorator.
+
+  If a decorator approach was chosen to mimic the `@dataclass` approach,
+  then the dependencies would have to be specified using another
+  decorator (ugly) or inside the class body (awkward).
+
+  That's why the choice was made towards inheritance. It is very familiar
+  to `pydantic` users and allows the list of dependencies to be specified
+  elegantly using the `@requires` decorator sitting on top of the class
+  definition.
+
+* `__init__()` as initialization method instead of `provider_init()`.
+
+  The choice was made use native `__init__()`, because that's where any
+  developer would expect to find the initialization code. Introducing
+  a separate `provider_init()` method would inflict additional cognitive
+  load for no real benefit.
+
+  There could be one justification for custom methods: async
+  initialization. In that case, two base classes would exist:
+  `BaseProvider` and `AsyncBaseProvider`. Each would define
+  `provider_init()` and `provider_dispose()` methods as normal functions
+  or as coroutines. However, the whole async approach had to be discarded
+  because of incompatibility with guarded class variables (see below).
+
+* `__del__()` as disposal method.
+
+  While the `__del__()` method is rarely used and is unfamiliar to most
+  Python developers, it is the least awkard way to define a sort of a 
+  destructor for a provider.
+
+  Even though the **true** implementation of `__del__()` explicitly
+  states the it is guaranteed to be called, it does not affect the
+  provider, because we hijack both the `__init__` and `__del__` and they
+  are guaranteed to be called.
+
+  An alternative would be to force the developers to deal with
+  restrictive `weakref.finalize` functions which are hard to use because
+  you can't pass a reference to the instance you want to dispose of
+  as an argument to the finalizer.
+
+* `@init`
+
+  While technically the `@init` decorator for guarded class methods is
+  not required at all, it has been added for type checking purposes.
+
+  Without `@init`, we could forcibly convert all methods of the
+  class into `classmethod`s, adding dependency initialization checks
+  around them and allowing them to be called without an instance.
+
+  ```python
+  """Without @init but with failing type checks"""
+
+  class MyProvider(BaseProvider):
+      def greet(self, name: str):
+          print(f"Hello, {name}!")
+
+  if __name__ == "__main__":
+      MyProvider.greet("World")
+  ```
+
+  That works and looks very nice, but the static type analyzers go crazy.
+  They expect the `greet` method to receive 2 arguments, but we only
+  pass one.
+
+  An alternative would be to overhaul the entire provider protocol and
+  require an actual instance creation. However, under the hood, we
+  could always return a singleton instance from the `__new__` method.
+
+  ```python
+  """Alternative to @init with instance creation"""
+
+  class MyProvider(BaseProvider):
+      def greet(self, name: str):
+          print(f"Hello, {name}!")
+
+  if __name__ == "__main__":
+      MyProvider().greet("World")
+  ```
+
+  That would work too, but it is so awkward that it's painful to use.
+  This is not Java and in Python nobody just creates instances left and
+  right for no good reason. Any Python developer that reads the code 
+  above would immediately assume that a one-time instance of `MyProvider`
+  was created and would be destroyed soon, which seems counter 
+  intuitive.
+
+  There is, however, still one reason for `MyProvider()` approach
+  to remain on the table: **AI coding assistant and tab-completion.**
+  During tests, most of the time, when not surrounded by examples or
+  without explicit instructions, they attempt to write
+  `MyProvider().greet("World")` instead of `MyProvider.greet("World")`.
+  If this will remain the case, **the library might eventually switch
+  to this awkward but practical approach.**
+
+  That's why we have the `@init` decorator. It's not there to make
+  providers and guarded methods work. It is there to solve the type
+  checking while being the least awkward approach.
+
+* No `async` initialization or disposal.
+
+  There are use cases where we'd want both the `__init__` and
+  `__dispose__` to be async and the whole initialization and disposal of
+  a particular provider to happen inside an already running event loop.
+
+  For example, an async http client:
+
+  ```python
+  import asyncio
+  import aiohttp
+
+  class MyProvider(BaseProvider):
+      client: aiohttp.ClientSession
+
+      async def __init__(self):
+          self.client = aiohttp.ClientSession()
+
+      async def __dispose__(self):
+          await self.client.close()
+  ```
+
+  That would look and feel amazing. We could impose a rule that async
+  providers can depend on sync and other async providers. But the sync
+  providers would only be allowed to depend on other sync providers,
+  which would address most concerns around async initialization order.
+
+  Unfortunately, this whole logic breaks down the moment we attempt to
+  implement guarded class variables.
+
+  Imagine a function which accesses the `client` class variable above
+  for some purposes:
+
+  ```python
+  async def main():
+    await MyProvider.client.get("https://example.com")
+
+  if __name__ == "__main__":
+    asyncio.run(main())
+  ```
+
+  As soon as `MyProvider.client` code is reached, the provider library
+  must detect that an attempt to read a guarded class variable is made.
+  It checks whether the provider is initialized or not. If it is not,
+  it initializes all of the dependencies of this provider and the
+  provider itself. Once that's done, the `client` value, already
+  initialized at this point, is returned.
+
+  The only way to implement this detection and lazy initialization
+  at access time is to override the `__getattribute__` method.
+  
+  In a situation where provider's initialization logic is asynchronous
+  the provider chain initialization funciton would have to be called
+  with `await`. But that would be impossible inside a normal function
+  or method, such as `__getattribute__`.
+
+  Therefore, a tradeoff must be made. Either we want guarded class
+  variables that are lazily initialized at runtime. Or we want
+  providers that can have asynchronous initialization logic.
+  Can't have both.
+
+  In this library, the choice was made in favor of the former. Lazily
+  initialized guarded class variables are too convenient to give them
+  up.
 
 ## License
 
