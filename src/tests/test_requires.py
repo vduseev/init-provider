@@ -49,6 +49,7 @@ def test_requires_raises_if_dependency_not_subclass_of_baseprovider(clean_sys_mo
         ProviderDefinitionError,
         match="Cannot use NotProvider as a dependency because it is not a subclass of BaseProvider",
     ):
+
         @requires(NotProvider)  # type: ignore[arg-type]
         class TestProvider(BaseProvider):
             pass
@@ -62,6 +63,7 @@ def test_requires_raises_if_decorated_class_not_baseprovider(clean_sys_modules):
         ProviderDefinitionError,
         match="Cannot use @requires on NotProvider because it is not a subclass of BaseProvider",
     ):
+
         @requires(TestProvider)  # type: ignore[arg-type]
         class NotProvider:
             pass

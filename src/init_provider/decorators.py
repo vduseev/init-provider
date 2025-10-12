@@ -81,10 +81,10 @@ def init(
         ```
     """
     func_ = func.__func__ if isinstance(func, classmethod) else func
-    if func_.__name__ in ("__init__", "__del__"):
+    if func_.__name__ in ("__init__", "__del__"):  # type: ignore[unresolved-attribute]
         raise ProviderDefinitionError(
-            f"{func_.__qualname__} is a reserved method and cannot be "
-            "decorated with @init."
+            f"{func_.__qualname__} is a reserved method "  # type: ignore[unresolved-attribute]
+            "and cannot be decorated with @init."
         )
 
     guarded_func = _wrap_guarded_method(func_)
@@ -185,7 +185,8 @@ def setup(func: Callable[[], _R_co]) -> Callable[[], _R_co]:
     # Cannot register functions that expect arguments.
     if inspect.getfullargspec(func).args:
         raise ProviderDefinitionError(
-            f"{func.__qualname__} is a function that expects arguments and cannot be used as a setup function"
+            f"{func.__qualname__} is a function that expects "  # type: ignore[unresolved-attribute]
+            "arguments and cannot be used as a setup function"
         )
 
     ProviderMetaclass.__provider_setup_hook__ = func  # type: ignore[attr-defined]
@@ -217,7 +218,8 @@ def dispose(func: Callable[[], _R_co]) -> Callable[[], _R_co]:
     # Cannot register functions that expect arguments.
     if inspect.getfullargspec(func).args:
         raise ProviderDefinitionError(
-            f"{func.__qualname__} is a function that expects arguments and cannot be used as a dispose function"
+            f"{func.__qualname__} is a function that expects "  # type: ignore[unresolved-attribute]
+            "arguments and cannot be used as a dispose function"
         )
 
     ProviderMetaclass.__provider_dispose_hook__ = func  # type: ignore[attr-defined]

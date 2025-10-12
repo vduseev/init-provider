@@ -54,6 +54,7 @@ def test_setup_raises_if_expects_arguments(clean_sys_modules):
         ProviderDefinitionError,
         match="is a function that expects arguments and cannot be used as a setup function",
     ):
+
         @setup  # type: ignore[arg-type]
         def test_setup(arg: str):
             pass

@@ -21,7 +21,6 @@ Covariant, because the decorator only uses _R_co to define what
 is being returned. It doesn't modify it or accept it as an argument.
 """
 
-
 class init(Generic[_PT, _P, _R_co]):
     """Ensure provider and dependencies are initialized when this method is called.
 
@@ -117,7 +116,6 @@ class init(Generic[_PT, _P, _R_co]):
     # # if additionally decorated with @classmethod, this will be a callable
     def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _R_co: ...
     _is_coroutine: bool
-
 
 def requires(
     *dependencies: type[BaseProvider],

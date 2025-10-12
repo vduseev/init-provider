@@ -22,7 +22,7 @@ def test_basic(clean_sys_modules):
     assert TestProvider.__bases__ == (BaseProvider,)
     assert TestProvider.__provider_created__ is False
     assert TestProvider.__provider_dependencies__ == set()
-    assert TestProvider.__provider_init__ is not None
+    assert TestProvider.__provider_init__ is not None  # type: ignore[unresolved-attribute]
 
     # Guards
     assert not inspect.isfunction(TestProvider.get_guarded_attr)

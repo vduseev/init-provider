@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from init_provider import BaseProvider, init, requires, setup, dispose
 
+
 @setup
 def configure() -> None:
     logging.basicConfig(
@@ -11,10 +12,12 @@ def configure() -> None:
     if not Path("file.txt").exists():
         logging.info("> file.txt does not yet exist")
 
+
 @dispose
 def cleanup() -> None:
     if not Path("file.txt").exists():
         logging.info("> file.txt no longer exist")
+
 
 class Storage(BaseProvider):
     path = Path("file.txt")
@@ -38,11 +41,13 @@ class Storage(BaseProvider):
         logging.info(f"> read from Storage: {data}")
         return data
 
+
 @requires(Storage)
 class Namer(BaseProvider):
     def __init__(self) -> None:
         logging.info("> create Namer")
         Storage.write("Bobby")
+
 
 @requires(Namer)
 class Greeter(BaseProvider):
@@ -55,6 +60,7 @@ class Greeter(BaseProvider):
     @init
     def greet(self) -> None:
         print(f">>> Hello, {self.define_at_runtime}!")
+
 
 if __name__ == "__main__":
     Greeter.greet()

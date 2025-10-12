@@ -37,6 +37,7 @@ import logging
 from pathlib import Path
 from init_provider import BaseProvider, init, requires, setup, dispose
 
+
 @setup
 def configure() -> None:
     logging.basicConfig(
@@ -46,10 +47,12 @@ def configure() -> None:
     if not Path("file.txt").exists():
         logging.info("> file.txt does not yet exist")
 
+
 @dispose
 def cleanup() -> None:
     if not Path("file.txt").exists():
         logging.info("> file.txt no longer exist")
+
 
 class Storage(BaseProvider):
     path = Path("file.txt")
@@ -73,11 +76,13 @@ class Storage(BaseProvider):
         logging.info(f"> read from Storage: {data}")
         return data
 
+
 @requires(Storage)
 class Namer(BaseProvider):
     def __init__(self) -> None:
         logging.info("> create Namer")
         Storage.write("Bobby")
+
 
 @requires(Namer)
 class Greeter(BaseProvider):
@@ -90,6 +95,7 @@ class Greeter(BaseProvider):
     @init
     def greet(self) -> None:
         print(f">>> Hello, {self.define_at_runtime}!")
+
 
 if __name__ == "__main__":
     Greeter.greet()
@@ -257,6 +263,7 @@ from init_provider import BaseProvider, init, requires
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s %(message)s")
 
+
 class GeoService(BaseProvider):
     @init
     def city_coordinates(self, name: str) -> tuple[float, float]:
@@ -267,11 +274,12 @@ class GeoService(BaseProvider):
             return 40.7128, -74.0060  # New York, USA
         raise ValueError(f"Unknown city: {name}")
 
+
 @requires(GeoService)
 class WeatherService(BaseProvider):
     _session: ClientSession
     _base_url: str = "https://api.open-meteo.com/v1/forecast/"
-    
+
     def __init__(self) -> None:
         # Properly initializing aiohttp session at runtime, when the
         # default asyncio loop is already running.
@@ -284,10 +292,15 @@ class WeatherService(BaseProvider):
     @init
     async def temperature(self, city: str) -> float:
         lat, lon = GeoService.city_coordinates(city)
-        params = {"latitude": lat, "longitude": lon, "hourly": "temperature_2m"}
+        params: dict[str, str | float] = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "temperature_2m",
+        }
         async with self._session.get(self._base_url, params=params) as resp:
             data = await resp.json()
             return data["hourly"]["temperature_2m"][0]
+
 
 async def main():
     # This will immediately initialize WeatherService and its dependencies,
@@ -295,8 +308,8 @@ async def main():
     print(f"Is session closed: {WeatherService._session.closed}")
 
     # Subsequent calls do not reinitialize the provider.
-    london = await WeatherService.temperature('London')
-    new_york = await WeatherService.temperature('New York')
+    london = await WeatherService.temperature("London")
+    new_york = await WeatherService.temperature("New York")
     print(f"London: {london:.2f}°C")
     print(f"New York: {new_york:.2f}°C")
 
@@ -323,8 +336,8 @@ INFO     Provider GeoService initialized
 DEBUG    Initializing provider WeatherService...
 INFO     Provider WeatherService initialized
 Is session closed: False
-London: 13.80°C
-New York: 15.30°C
+London: 11.40°C
+New York: 16.50°C
 Is session closed: True
 DEBUG    Provider dispose call order: ['WeatherService', 'GeoService']
 INFO     Dispose hook for WeatherService was executed.
@@ -343,6 +356,7 @@ from typing import Generator
 
 from init_provider import BaseProvider, init, requires, setup
 
+
 # (Optional) Declare a setup function to be executed once per application
 # process before any provider is initialized.
 @setup
@@ -351,7 +365,8 @@ def configure():
     logging.basicConfig(level=logging.DEBUG, format=log_format)
     warnings.filterwarnings("ignore", module="some_module")
 
-# ↓ Basic provider. Exposes 1 attribute: connection 
+
+# ↓ Basic provider. Exposes 1 attribute: connection
 class DatabaseService(BaseProvider):
     """Single instance of connection ot SQLite."""
 
@@ -394,6 +409,7 @@ class DatabaseService(BaseProvider):
         with sqlite3.connect(self.db_path) as conn:
             yield conn
 
+
 # ↓ This one depends on another provider.
 @requires(DatabaseService)
 class UserService(BaseProvider):
@@ -417,6 +433,7 @@ class UserService(BaseProvider):
                 return result[0]
             else:
                 return None
+
 
 if __name__ == "__main__":
     # ↓ This will cause the chain of dependencies to be

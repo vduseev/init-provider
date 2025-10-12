@@ -10,10 +10,12 @@ from typing import (
     Concatenate,
     TYPE_CHECKING,
     Any,
+    cast,
 )
 
 if TYPE_CHECKING:
     from ..provider import BaseProvider
+    from ._metaclass import ProviderMetaclass
 
 from ..exceptions import (
     CircularDependency,
@@ -46,11 +48,12 @@ __all__ = [
 def _get_init_plug(provider: str) -> Callable:
     def _init_plug(*args: Any, **kwargs: Any) -> None:
         """Prevent users from calling __init__() directly.
-        
+
         The __init__() method is only meant to be called by the provider
         initialization process.
         """
         raise InstantiationError(provider)
+
     _init_plug.__name__ = "__init__"
     _init_plug.__qualname__ = provider + ".__init__"
     return _init_plug
@@ -96,7 +99,7 @@ def _sort_providers(
     cause: str | None = None,
 ) -> list[type["BaseProvider"]]:
     """Sort providers based on their dependencies using topologigal sort.
-   
+
     This method analyzes the dependency graph and returns providers in the
     order they should be initialized. The dependencies always come before
     the providers that depend on them.
@@ -165,10 +168,13 @@ def _raise_on_self_dependency(
     frame = inspect.currentframe()
     try:
         while frame:
-            if frame.f_code.co_qualname.endswith(
+            if frame.f_code.co_qualname.endswith(  # type: ignore[unresolved-attribute]
                 f"{cls.__name__}.__init__",
             ):
-                raise SelfDependency(cls.__name__, method.__name__)
+                raise SelfDependency(
+                    cls.__name__,
+                    method.__name__,  # type: ignore[unresolved-attribute]
+                )
             frame = frame.f_back
     finally:
         del frame
@@ -183,8 +189,9 @@ def _initialize_provider_chain(
             return
 
         # Call metaclass setup hook if it is defined.
-        if hasattr(cls.__class__, "_ensure_setup_hook_executed"):
-            cls.__class__._ensure_setup_hook_executed()
+        metaclass = cast("type[ProviderMetaclass]", cls.__class__)
+        if hasattr(metaclass, "_ensure_setup_hook_executed"):
+            metaclass._ensure_setup_hook_executed()
 
         logger.debug(
             f"About to initialize provider {cls.__name__} because of: {requested_for}"
@@ -226,14 +233,15 @@ def _wrap_guarded_method(
     f: Callable[Concatenate[type[_PT], _P], _R],
 ) -> Callable[Concatenate[type[_PT], _P], _R]:
     if inspect.iscoroutinefunction(f):
+
         @wraps(f)
         async def async_wrapper(
             cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs
         ) -> _R:  # type: ignore[override]
             if not getattr(cls, "__provider_created__", False):
                 _raise_on_self_dependency(cls, f)
-                _initialize_provider_chain(cls, requested_for=f.__name__)
-            return await f(cls, *args, **kwargs)
+                _initialize_provider_chain(cls, requested_for=f.__name__)  # type: ignore[unresolved-attribute]
+            return await f(cls, *args, **kwargs)  # type: ignore[invalid-await]
 
         return async_wrapper  # type: ignore[return-value]
 
@@ -241,7 +249,7 @@ def _wrap_guarded_method(
     def sync_wrapper(cls: type[_PT], *args: _P.args, **kwargs: _P.kwargs) -> _R:  # type: ignore[override]
         if not getattr(cls, "__provider_created__", False):
             _raise_on_self_dependency(cls, f)
-            _initialize_provider_chain(cls, requested_for=f.__name__)
+            _initialize_provider_chain(cls, requested_for=f.__name__)  # type: ignore[unresolved-attribute]
         return f(cls, *args, **kwargs)
 
     return sync_wrapper  # type: ignore[return-value]

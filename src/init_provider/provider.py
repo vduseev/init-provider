@@ -20,7 +20,7 @@ class BaseProvider(ABC, metaclass=ProviderMetaclass):
         RuntimeError: When attempting to create an instance of a provider.
 
     Example:
-    
+
         ```python
         @requires(DatabaseProvider, CacheProvider)
         class UserCache(BaseProvider):
@@ -47,6 +47,7 @@ class BaseProvider(ABC, metaclass=ProviderMetaclass):
                 cls.refresh_timestamp = datetime.now()
         ```
     """
+
     __provider_created__: bool = False
     __provider_disposed__: bool = False
     __provider_dependencies__: set[type["BaseProvider"]] = set()

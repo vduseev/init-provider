@@ -166,8 +166,7 @@ class SelfDependency(ProviderError):
 
     def __init__(self, name: str, method: str):
         super().__init__(
-            f"Method {method} was called in __init__() "
-            f"of its class {name}"
+            f"Method {method} was called in __init__() of its class {name}"
         )
 
 

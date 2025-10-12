@@ -7,6 +7,7 @@ from typing import Generator
 
 from init_provider import BaseProvider, init, requires, setup
 
+
 # (Optional) Declare a setup function to be executed once per application
 # process before any provider is initialized.
 @setup
@@ -15,7 +16,8 @@ def configure():
     logging.basicConfig(level=logging.DEBUG, format=log_format)
     warnings.filterwarnings("ignore", module="some_module")
 
-# ↓ Basic provider. Exposes 1 attribute: connection 
+
+# ↓ Basic provider. Exposes 1 attribute: connection
 class DatabaseService(BaseProvider):
     """Single instance of connection ot SQLite."""
 
@@ -58,6 +60,7 @@ class DatabaseService(BaseProvider):
         with sqlite3.connect(self.db_path) as conn:
             yield conn
 
+
 # ↓ This one depends on another provider.
 @requires(DatabaseService)
 class UserService(BaseProvider):
@@ -81,6 +84,7 @@ class UserService(BaseProvider):
                 return result[0]
             else:
                 return None
+
 
 if __name__ == "__main__":
     # ↓ This will cause the chain of dependencies to be

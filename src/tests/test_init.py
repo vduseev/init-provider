@@ -189,11 +189,11 @@ def test_attribute_unset_error(clean_sys_modules):
 
 
 def test_init_args(clean_sys_modules):
-
     with pytest.raises(
         ProviderDefinitionError,
         match="Cannot use __init__ with arguments",
     ):
+
         class ProviderWithArgs(BaseProvider):
             _init_counter = 0
 
@@ -201,4 +201,3 @@ def test_init_args(clean_sys_modules):
                 self._init_counter += 1
                 self.arg1 = arg1
                 self.arg2 = arg2
-        

@@ -27,7 +27,6 @@ logger = logging.getLogger("init_provider")
 __all__ = ["ProviderMetaclass"]
 
 
-
 class ProviderMetaclass(ABCMeta):
     __provider_set__: set[type] = set()
     __provider_setup_done__: bool = False
@@ -49,27 +48,22 @@ class ProviderMetaclass(ABCMeta):
             if attr == "__init__":
                 init_args = inspect.getfullargspec(value).args
                 if len(init_args) > 1:
-                    raise ProviderDefinitionError(
-                        "Cannot use __init__ with arguments"
-                    )
+                    raise ProviderDefinitionError("Cannot use __init__ with arguments")
 
-                provider_init = classmethod(value)
+                provider_init: classmethod = classmethod(value)
                 new_ns["__init__"] = _get_init_plug(name)
                 new_ns["__provider_init__"] = provider_init
 
             elif attr == "__del__":
                 del_args = inspect.getfullargspec(value).args
                 if len(del_args) > 1:
-                    raise ProviderDefinitionError(
-                        "Cannot use __del__ with arguments"
-                    )
+                    raise ProviderDefinitionError("Cannot use __del__ with arguments")
 
-                provider_dispose = classmethod(value)
+                provider_dispose: classmethod = classmethod(value)
                 new_ns["__provider_dispose__"] = provider_dispose
 
-            elif (
-                isinstance(value, FunctionType)
-                and not (attr.startswith("__") and attr.endswith("__"))
+            elif isinstance(value, FunctionType) and not (
+                attr.startswith("__") and attr.endswith("__")
             ):
                 raise ProviderDefinitionError(
                     f"Method {name}.{attr} must be decorated with "
@@ -145,7 +139,7 @@ class ProviderMetaclass(ABCMeta):
                 logger.info(summary)
             except Exception as e:
                 raise SetupError(e) from e
-            
+
     @staticmethod
     def _ensure_dispose_hook_executed() -> None:
         # Call the __del__() method of each provider in the reverse
