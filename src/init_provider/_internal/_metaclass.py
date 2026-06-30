@@ -55,7 +55,7 @@ class ProviderMetaclass(ABCMeta):
                 "__annotate__"
             )
             if annotate is not None:
-                import annotationlib
+                import annotationlib  # type: ignore
 
                 # ``call_annotate_function`` evaluates the lazy annotate
                 # function and falls back gracefully for formats the function

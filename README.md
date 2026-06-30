@@ -337,8 +337,8 @@ INFO     Provider GeoService initialized
 DEBUG    Initializing provider WeatherService...
 INFO     Provider WeatherService initialized
 Is session closed: False
-London: 11.40°C
-New York: 16.50°C
+London: 19.30°C
+New York: 27.10°C
 Is session closed: True
 DEBUG    Provider dispose call order: ['WeatherService', 'GeoService']
 INFO     Dispose hook for WeatherService was executed.
