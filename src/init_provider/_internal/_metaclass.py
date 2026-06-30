@@ -41,7 +41,29 @@ class ProviderMetaclass(ABCMeta):
         /,
         **kwds: Any,
     ) -> type:
-        annotations: dict[str, Any] = namespace.get("__annotations__", {})
+        annotations: dict[str, Any] = namespace.get("__annotations__") or {}
+        if not annotations:
+            # Python 3.14+ (PEP 649): when a class body does not use
+            # ``from __future__ import annotations``, its annotations are
+            # evaluated lazily and the class namespace carries an
+            # ``__annotate__`` function instead of a populated
+            # ``__annotations__`` dict. We only need the annotated *names* to
+            # compute guarded attributes, so evaluate the annotate function in
+            # FORWARDREF format — this returns the names without resolving
+            # (possibly not-yet-defined) forward references.
+            annotate = namespace.get("__annotate_func__") or namespace.get(
+                "__annotate__"
+            )
+            if annotate is not None:
+                import annotationlib
+
+                # ``call_annotate_function`` evaluates the lazy annotate
+                # function and falls back gracefully for formats the function
+                # does not natively support, tolerating forward references to
+                # not-yet-defined names (we only need the annotated names).
+                annotations = annotationlib.call_annotate_function(
+                    annotate, annotationlib.Format.FORWARDREF
+                )
         new_ns: dict[str, Any] = {}
 
         for attr, value in namespace.items():
